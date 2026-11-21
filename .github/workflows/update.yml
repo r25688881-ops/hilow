@@ -1,0 +1,36 @@
+name: update-backtest
+
+on:
+  workflow_dispatch:        # 可在 Actions 頁面手動執行
+  schedule:
+    - cron: "30 7 * * 1-5"  # 週一到週五 UTC 07:30 = 台灣 15:30（收盤後）
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: 抓資料並回測
+        env:
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}   # 選填；沒設定也能跑，只是額度較低
+        run: python run_all.py
+
+      - name: 提交結果
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add result.js result.json
+          git diff --cached --quiet || git commit -m "update backtest $(date -u +%F)"
+          git push
