@@ -116,14 +116,14 @@ footer{color:var(--sub);font-size:12.5px;margin-top:20px}
   <footer>歷史回測不代表未來績效；本頁內容僅為量化研究與教學用途，不構成任何投資建議。投資有風險，請自行評估並承擔結果。</footer>
 </div>
 
-<script src="data/result.js"></script>
+<script src="result.js"></script>
 <script>
 (function(){
 "use strict";
 const R = window.RESULT;
 const app = document.getElementById('app');
 if(!R){
-  document.getElementById('meta').innerHTML = '<div class="card err">找不到 data/result.js。請先執行 <code>python run_all.py</code> 產生資料。</div>';
+  document.getElementById('meta').innerHTML = '<div class="card err">找不到 result.js。請先執行 <code>python run_all.py</code> 產生資料。</div>';
   return;
 }
 const M = R.meta, MK = R.market, ST = R.stocks;
