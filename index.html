@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>台股高低點訊號與選股回測</title>
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2563eb">
+<style>
+:root{
+  --bg:#f6f7f9; --card:#fff; --ink:#1b1f27; --sub:#5b6472; --line:#e3e6eb;
+  --blue:#2563eb; --gray:#6b7280; --amber:#d97706; --bot:#2563eb; --top:#ea580c;
+  --up:#d9363e; --down:#15803d; --chip:#eef1f6; --warn-bg:#fff4e0; --warn-ink:#7a4a00; --warn-line:#f0c987;
+  --ok-bg:#e7f6ec; --ok-ink:#14532d; --bad-bg:#fdecec; --bad-ink:#7f1d1d;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0f1218; --card:#171b23; --ink:#e8ebf0; --sub:#9aa3b2; --line:#2a303b;
+    --blue:#6ea0ff; --gray:#98a1b0; --amber:#f0a73a; --bot:#6ea0ff; --top:#ff8a4d;
+    --up:#ff6b6b; --down:#4ade80; --chip:#232936; --warn-bg:#2d2412; --warn-ink:#f3cf8a; --warn-line:#5a4720;
+    --ok-bg:#12301f; --ok-ink:#a7f0c0; --bad-bg:#3a1717; --bad-ink:#ffb4b4;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 "Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px 48px}
+header{padding:22px 0 10px}
+h1{font-size:22px;margin:0 0 4px;letter-spacing:.02em}
+.meta{color:var(--sub);font-size:13px}
+.demo{background:var(--warn-bg);color:var(--warn-ink);border:1px solid var(--warn-line);border-radius:10px;padding:10px 14px;margin:12px 0;font-size:14px}
+nav{position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0;margin:0 -16px 12px;padding-left:16px;padding-right:16px;border-bottom:1px solid var(--line);display:flex;gap:6px;overflow-x:auto}
+nav button{flex:0 0 auto;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:7px 14px;border-radius:999px;font:inherit;font-size:14px;cursor:pointer}
+nav button.on{background:var(--blue);border-color:var(--blue);color:#fff}
+section.tab{display:none}
+section.tab.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin:0 0 14px}
+.card h2{font-size:16px;margin:0 0 10px}
+.card h3{font-size:14px;margin:14px 0 6px;color:var(--sub);font-weight:600}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:1fr 1fr}
+.g4{grid-template-columns:repeat(4,1fr)}
+@media (max-width:760px){.g2{grid-template-columns:1fr}.g4{grid-template-columns:1fr 1fr}}
+.badge{display:inline-block;padding:4px 12px;border-radius:999px;font-weight:700;font-size:15px}
+.b-neutral{background:var(--chip);color:var(--ink)}
+.b-bottom{background:color-mix(in srgb,var(--bot) 18%,transparent);color:var(--bot)}
+.b-top{background:color-mix(in srgb,var(--top) 18%,transparent);color:var(--top)}
+.b-mixed{background:var(--warn-bg);color:var(--warn-ink)}
+.meter{display:flex;gap:4px;margin:6px 0 2px}
+.meter i{flex:1;height:8px;border-radius:4px;background:var(--chip)}
+.meter.bot i.on{background:var(--bot)} .meter.top i.on{background:var(--top)}
+.flags{list-style:none;margin:8px 0 0;padding:0;font-size:13.5px}
+.flags li{display:flex;gap:8px;align-items:flex-start;padding:3px 0;color:var(--sub)}
+.flags li.on{color:var(--ink);font-weight:600}
+.dot{flex:0 0 auto;width:10px;height:10px;border-radius:50%;margin-top:6px;background:var(--line)}
+.flags.bot li.on .dot{background:var(--bot)} .flags.top li.on .dot{background:var(--top)}
+.kpi .v{font-size:24px;font-weight:700;line-height:1.2}
+.kpi .l{font-size:12.5px;color:var(--sub)}
+.kpi .s{font-size:12.5px;color:var(--sub);margin-top:2px}
+.up{color:var(--up)} .down{color:var(--down)}
+.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{padding:7px 9px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+th{color:var(--sub);font-weight:600;font-size:12.5px}
+th:first-child,td:first-child{text-align:left}
+td.l,th.l{text-align:left}
+tr.base td{color:var(--sub);font-style:italic}
+.tag{display:inline-block;padding:1px 8px;border-radius:6px;font-size:12px;font-weight:600;background:var(--chip)}
+.t-buy{background:color-mix(in srgb,var(--up) 16%,transparent);color:var(--up)}
+.t-hold{background:var(--chip);color:var(--sub)}
+.t-sell{background:color-mix(in srgb,var(--down) 18%,transparent);color:var(--down)}
+.t-avoid{background:var(--chip);color:var(--sub)}
+.verdict{display:inline-block;padding:2px 9px;border-radius:6px;font-size:12.5px;font-weight:600;margin-left:6px}
+.v-ok{background:var(--ok-bg);color:var(--ok-ink)} .v-bad{background:var(--bad-bg);color:var(--bad-ink)} .v-mid{background:var(--chip);color:var(--sub)}
+.note{font-size:13px;color:var(--sub)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:0 6px 6px 0}
+.seg button{border:0;background:var(--card);color:var(--sub);padding:5px 11px;font:inherit;font-size:13px;cursor:pointer}
+.seg button.on{background:var(--blue);color:#fff}
+.chartbox{position:relative;width:100%}
+.chartbox svg{display:block;width:100%;height:auto;touch-action:pan-y}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--sub);margin:2px 0 6px}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px}
+.tip{position:absolute;pointer-events:none;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:12.5px;box-shadow:0 4px 14px rgba(0,0,0,.14);z-index:3;white-space:nowrap;display:none}
+.tip b{display:block;margin-bottom:2px}
+.tip em{font-style:normal;display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
+details{margin:8px 0}
+summary{cursor:pointer;color:var(--blue);font-size:14px}
+.prose p{margin:6px 0} .prose h3{color:var(--ink);font-size:15px;margin:16px 0 4px}
+.prose ul{margin:4px 0 4px 18px;padding:0} .prose li{margin:3px 0}
+.err{color:var(--bad-ink);background:var(--bad-bg)}
+footer{color:var(--sub);font-size:12.5px;margin-top:20px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <header>
+    <h1 style="display:flex;align-items:center;gap:10px"><img src="icon.svg" alt="" width="34" height="34" style="border-radius:8px">台股高低點訊號 × 個股選股回測</h1>
+    <div class="meta" id="meta"></div>
+    <div id="banner"></div>
+  </header>
+  <nav id="nav">
+    <button data-t="overview" class="on">總覽</button>
+    <button data-t="market">大盤訊號</button>
+    <button data-t="stocks">十股建議</button>
+    <button data-t="perf">回測績效</button>
+    <button data-t="method">方法與風險</button>
+  </nav>
+  <section class="tab on" id="tab-overview"></section>
+  <section class="tab" id="tab-market"></section>
+  <section class="tab" id="tab-stocks"></section>
+  <section class="tab" id="tab-perf"></section>
+  <section class="tab" id="tab-method"></section>
+  <footer>歷史回測不代表未來績效；本頁內容僅為量化研究與教學用途，不構成任何投資建議。投資有風險，請自行評估並承擔結果。</footer>
+</div>
+
+<script src="data/result.js"></script>
+<script>
+(function(){
+"use strict";
+const R = window.RESULT;
+const app = document.getElementById('app');
+if(!R){
+  document.getElementById('meta').innerHTML = '<div class="card err">找不到 data/result.js。請先執行 <code>python run_all.py</code> 產生資料。</div>';
+  return;
+}
+const M = R.meta, MK = R.market, ST = R.stocks;
+const nz = v => v !== null && v !== undefined && !Number.isNaN(v);
+const pct = (v,d=1,sign=false) => nz(v) ? ((sign&&v>0?'+':'')+(v*100).toFixed(d)+'%') : '—';
+const num = (v,d=2) => nz(v) ? v.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}) : '—';
+const cls = v => !nz(v) ? '' : (v>0 ? 'up' : (v<0 ? 'down' : ''));
+const retCell = (v,d=1) => `<span class="${cls(v)}">${pct(v,d,true)}</span>`;
+const $ = (s, el=document) => el.querySelector(s);
+
+/* ---------- header ---------- */
+$('#meta').textContent = `資料截止 ${M.data_through} ・ 回測 ${M.backtest_start} ~ ${M.data_through}（樣本外自 ${M.oos_start}）・ 產生於 ${M.generated_at}`;
+const notes = [];
+if(M.demo) notes.push('<b>⚠ 這是 DEMO 示範資料（電腦合成，不是真實行情）。</b>所有數字、訊號與選股清單都沒有意義，只用來展示介面。請在 GitHub 執行 <code>python run_all.py</code> 或啟用 Actions，換成真實資料。');
+if(!M.finmind_margin) notes.push('融資維持率資料未取得，大盤訊號只使用價量指標（5 項計分）。');
+if(!M.finmind_revenue) notes.push('月營收資料未取得，個股選股未使用營收因子。');
+$('#banner').innerHTML = notes.map(t=>`<div class="demo">${t}</div>`).join('');
+
+/* ---------- tabs ---------- */
+const tabs = ['overview','market','stocks','perf','method'];
+const rendered = {};
+function show(t){
+  if(!tabs.includes(t)) t='overview';
+  tabs.forEach(x=>{ $('#tab-'+x).classList.toggle('on', x===t); });
+  document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on', b.dataset.t===t));
+  if(!rendered[t]){ renderers[t](); rendered[t]=true; }
+  else if(redraw[t]) redraw[t]();
+  history.replaceState(null,'','#'+t);
+  window.scrollTo({top:0});
+}
+document.getElementById('nav').addEventListener('click', e=>{ const b=e.target.closest('button'); if(b) show(b.dataset.t); });
+
+/* ---------- chart engine (inline SVG, no dependencies) ---------- */
+function niceTicks(lo,hi,n){
+  const raw=(hi-lo)/n; if(!(raw>0)) return [lo];
+  const p=Math.pow(10,Math.floor(Math.log10(raw))); const r=raw/p;
+  const step=(r<1.5?1:r<3?2:r<7?5:10)*p;
+  const out=[]; for(let v=Math.ceil(lo/step)*step; v<=hi+1e-9; v+=step) out.push(+v.toFixed(10));
+  return out;
+}
+function logTicks(lo,hi){
+  const out=[]; const k0=Math.floor(Math.log10(lo)), k1=Math.ceil(Math.log10(hi));
+  for(let k=k0;k<=k1;k++) for(const m of [1,2,5]){ const v=m*Math.pow(10,k); if(v>=lo*0.999&&v<=hi*1.001) out.push(v); }
+  return out;
+}
+function chart(host, o){
+  host.innerHTML='';
+  const W = Math.max(host.clientWidth||700, 280), H = o.height || (W<520?230:300);
+  const m={l:o.left||50,r:10,t:8,b:22}, iw=W-m.l-m.r, ih=H-m.t-m.b;
+  const D=o.dates, n=D.length, i0=Math.min(o.from||0, n-2);
+  let lo=Infinity, hi=-Infinity;
+  o.series.forEach(s=>{ for(let i=i0;i<n;i++){ const v=s.values[i]; if(nz(v)&&(!o.log||v>0)){ lo=Math.min(lo,v); hi=Math.max(hi,v);} } });
+  if(!isFinite(lo)){ host.textContent='無資料'; return; }
+  if(o.maxZero) hi=0;
+  const f=o.log?Math.log:(x=>x);
+  let a=f(lo), b=f(hi); const pad=(b-a)*0.06||0.5; a-=pad; if(!o.maxZero) b+=pad;
+  const X=i=>m.l+(i-i0)/Math.max(n-1-i0,1)*iw, Y=v=>m.t+(1-(f(v)-a)/(b-a))*ih;
+  const yf=o.yFmt||(v=>num(v,0));
+  let s=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img">`;
+  const ticks=o.log?logTicks(lo,hi):niceTicks(o.maxZero?lo:lo,hi,5);
+  ticks.forEach(t=>{ const y=Y(t); if(y<m.t-1||y>m.t+ih+1) return;
+    s+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" style="stroke:var(--line)"/>`;
+    s+=`<text x="${m.l-6}" y="${(y+4).toFixed(1)}" text-anchor="end" font-size="11" style="fill:var(--sub)">${yf(t)}</text>`; });
+  // x labels: first index of each year
+  const yrs=[]; for(let i=i0;i<n;i++){ if(i===i0||D[i].slice(0,4)!==D[i-1].slice(0,4)) yrs.push(i); }
+  const every=Math.ceil(yrs.length/(W<520?4:9));
+  yrs.forEach((i,k)=>{ if(k%every) return; const x=X(i);
+    s+=`<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${m.t+ih}" y2="${m.t+ih+4}" style="stroke:var(--line)"/>`;
+    s+=`<text x="${x.toFixed(1)}" y="${H-5}" text-anchor="middle" font-size="11" style="fill:var(--sub)">${D[i].slice(0,4)}</text>`; });
+  if(o.zeroLine && lo<0 && hi>0){ const y=Y(0); s+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y}" y2="${y}" style="stroke:var(--sub)" stroke-dasharray="3 3"/>`; }
+  o.series.forEach(se=>{
+    let d='', pen=false;
+    for(let i=i0;i<n;i++){ const v=se.values[i]; if(!nz(v)||(o.log&&v<=0)){pen=false;continue;}
+      d+=(pen?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1); pen=true; }
+    if(se.fill){ const y0=Y(Math.min(0,hi)); s+=`<path d="${d} L${X(n-1).toFixed(1)} ${y0.toFixed(1)} L${X(i0).toFixed(1)} ${y0.toFixed(1)}Z" style="fill:${se.color};opacity:.18"/>`; }
+    s+=`<path d="${d}" fill="none" stroke-linejoin="round" style="stroke:${se.color};stroke-width:${se.width||1.6}" ${se.dash?`stroke-dasharray="${se.dash}"`:''}/>`;
+  });
+  const dmap=new Map(); D.forEach((d,i)=>dmap.set(d,i));
+  (o.markers||[]).forEach(mk=>{ const i=dmap.get(mk.date); if(i===undefined||i<i0) return; const v=o.series[0].values[i]; if(!nz(v)) return;
+    const x=X(i), y=Y(v), up=mk.shape==='up', dy=up?9:-9, sz=5.5;
+    const pts=up?`${x},${y+dy-sz} ${x-sz},${y+dy+sz} ${x+sz},${y+dy+sz}`:`${x},${y+dy+sz} ${x-sz},${y+dy-sz} ${x+sz},${y+dy-sz}`;
+    s+=`<polygon points="${pts}" style="fill:${mk.color};opacity:.9"/>`; });
+  s+=`<line id="cx" y1="${m.t}" y2="${m.t+ih}" style="stroke:var(--sub);display:none" stroke-dasharray="2 3"/>`;
+  s+=`<rect id="hit" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent"/></svg>`;
+  const legend=o.legend===false?'':`<div class="legend">${o.series.filter(x=>x.name).map(x=>`<span><i style="background:${x.color}"></i>${x.name}</span>`).join('')}${(o.legendExtra||'')}</div>`;
+  host.insertAdjacentHTML('beforeend', legend+`<div class="chartbox">${s}<div class="tip"></div></div>`);
+  const box=$('.chartbox',host), svg=$('svg',box), tip=$('.tip',box), cx=$('#cx',svg), hit=$('#hit',svg);
+  const evByDate=o.eventsByDate||{};
+  function move(ev){
+    const r=svg.getBoundingClientRect(); const px=(ev.clientX-r.left)*(W/r.width);
+    let i=Math.round(i0+(px-m.l)/iw*(n-1-i0)); i=Math.max(i0,Math.min(n-1,i));
+    const x=X(i); cx.setAttribute('x1',x); cx.setAttribute('x2',x); cx.style.display='';
+    let h=`<b>${D[i]}</b>`;
+    o.series.forEach(se=>{ if(se.name && nz(se.values[i])) h+=`<div><em style="background:${se.color}"></em>${se.name}：${(se.tipFmt||yf)(se.values[i])}</div>`; });
+    if(evByDate[D[i]]) h+=`<div style="margin-top:3px">${evByDate[D[i]]}</div>`;
+    tip.innerHTML=h; tip.style.display='block';
+    const tw=tip.offsetWidth; let left=(x/W)*r.width+12; if(left+tw>r.width-4) left=(x/W)*r.width-tw-12;
+    tip.style.left=Math.max(left,2)+'px'; tip.style.top='6px';
+  }
+  hit.addEventListener('pointermove',move); hit.addEventListener('pointerdown',move);
+  hit.addEventListener('pointerleave',()=>{ cx.style.display='none'; tip.style.display='none'; });
+}
+function fromIndex(dates, years){ if(!years) return 0; const end=new Date(dates[dates.length-1]); end.setFullYear(end.getFullYear()-years);
+  const iso=end.toISOString().slice(0,10); let i=dates.findIndex(d=>d>=iso); return i<0?0:i; }
+function segButtons(host, items, cur, onPick){
+  host.innerHTML=items.map(([k,l])=>`<button data-k="${k}" class="${String(k)===String(cur)?'on':''}">${l}</button>`).join('');
+  host.classList.add('seg');
+  host.onclick=e=>{ const b=e.target.closest('button'); if(!b) return; host.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); onPick(b.dataset.k); };
+}
+function table(head, rows, opt={}){
+  const LEFT=['股票','類型','說明','持股','新買進','賣出'];
+  return `<div class="tablewrap"><table><thead><tr>${head.map((h,i)=>`<th class="${(i===0||LEFT.includes(h))?'l':''}">${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+}
+
+/* ---------- 歷史驗證文字 ---------- */
+function evidence(kind, thr, seg, h){
+  const s=MK.stats[kind][thr][seg][h], b=MK.stats.baseline[seg][h][kind];
+  if(!s||!s.n) return null;
+  let v='mid', label='與隨機進場相近';
+  const dm = s.mean-b.mean, dw = s.win-b.win;
+  if(kind==='bottom'){ if(dm>0.005 && dw>0.03){v='ok';label='優於隨機進場';} else if(dm<-0.005 && dw<0){v='bad';label='未優於隨機進場';} }
+  else { if(dm<-0.005 && dw>0.03){v='ok';label='有預警效果';} else if(dm>0.005 && dw<0){v='bad';label='沒有預警效果';} }
+  return {s,b,v,label,few:s.n<20};
+}
+
+/* ---------- 總覽 ---------- */
+function renderOverview(){
+  const st=MK.state, el=$('#tab-overview');
+  const names={neutral:'中性（無明確反轉訊號）',bottom:'底部警示',top:'高點警示',mixed:'多空訊號並存'};
+  const meter=(k,max,cl)=>`<div class="meter ${cl}">${Array.from({length:max},(_,i)=>`<i class="${i<k?'on':''}"></i>`).join('')}</div>`;
+  const flags=(arr,cl)=>`<ul class="flags ${cl}">${arr.map(f=>`<li class="${f.on?'on':''}"><span class="dot"></span><span>${f.label}</span></li>`).join('')}</ul>`;
+  const advice={neutral:'目前沒有達到門檻的反轉訊號，不宜用大盤訊號做重大加減碼；可依「十股建議」的規則定期檢視。',
+    bottom:'多項超賣／恐慌指標同時出現。歷史上這類情境常是中期布局區，但仍可能續跌——建議分批而非一次投入。',
+    top:'多項過熱指標同時出現。歷史上這類情境常是風險升高區，可考慮分批減碼或收緊停利，而不是全數賣出。',
+    mixed:'短期內同時出現多空訊號，通常代表劇烈震盪，訊號可信度較低。'}[st.status];
+  const ev=(kind)=>{ const e=evidence(kind,String(st.threshold),'all','60'); if(!e) return '<span class="note">樣本不足</span>';
+    const word=kind==='bottom'?'上漲':'下跌';
+    return `共 <b>${e.s.n}</b> 次，之後 60 個交易日<b>${word}</b>的比率 <b>${pct(e.s.win,0)}</b>（隨機一天進場：${pct(e.b.win,0)}），平均報酬 ${retCell(e.s.mean)}（隨機：${retCell(e.b.mean)}）<span class="verdict v-${e.v}">${e.label}</span>${e.few?'<span class="verdict v-mid">樣本偏少</span>':''}`; };
+  const sm=ST.metrics, f=sm.strategy.full, bm=sm.benchmark.full, fo=sm.strategy.oos, bo=sm.benchmark.oos;
+  el.innerHTML=`
+  <div class="card">
+    <h2>大盤目前狀態（加權指數 ${num(st.close,0)}，${st.date}）</h2>
+    <div style="margin:4px 0 10px"><span class="badge b-${st.status}">${names[st.status]}</span></div>
+    <p style="margin:0 0 10px">${advice}</p>
+    <div class="grid g2">
+      <div><b style="color:var(--bot)">底部訊號</b>　${st.bottom_score} / ${st.bottom_max}（≥${st.threshold} 項算警示）${meter(st.bottom_score,st.bottom_max,'bot')}${flags(st.bottom_flags,'bot')}</div>
+      <div><b style="color:var(--top)">高點訊號</b>　${st.top_score} / ${st.top_max}（≥${st.threshold} 項算警示）${meter(st.top_score,st.top_max,'top')}${flags(st.top_flags,'top')}</div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>這些訊號過去準不準？（回測 ${M.params.backtest_years} 年，≥${st.threshold} 項同時成立）</h2>
+    <p style="margin:4px 0"><b style="color:var(--bot)">▲ 底部警示</b>：${ev('bottom')}</p>
+    <p style="margin:4px 0"><b style="color:var(--top)">▼ 高點警示</b>：${ev('top')}</p>
+    <p class="note" style="margin:8px 0 0">「隨機一天進場」是同一期間任何一天買進、持有 60 個交易日的平均結果，用來檢驗訊號有沒有比亂買更好。事件有群聚現象且樣本不多，請看「大盤訊號」頁的樣本內／外拆分。</p>
+  </div>
+  <div class="grid g4">
+    <div class="card kpi"><div class="l">選股策略 年化報酬</div><div class="v">${pct(f.cagr)}</div><div class="s">0050：${pct(bm.cagr)}</div></div>
+    <div class="card kpi"><div class="l">最大回撤</div><div class="v">${pct(f.mdd,0)}</div><div class="s">0050：${pct(bm.mdd,0)}</div></div>
+    <div class="card kpi"><div class="l">樣本外年化（近 ${M.params.oos_years} 年）</div><div class="v">${pct(fo.cagr)}</div><div class="s">0050：${pct(bo.cagr)}</div></div>
+    <div class="card kpi"><div class="l">夏普比率（全期）</div><div class="v">${num(f.sharpe)}</div><div class="s">0050：${num(bm.sharpe)}</div></div>
+  </div>
+  <div class="card">
+    <h2>目前建議持有的 10 檔（截至 ${ST.picks.as_of}）</h2>
+    ${picksTable(ST.picks.buy, true)}
+    <p class="note" style="margin:8px 0 0">詳細因子、賣出與避開清單請見「十股建議」頁。</p>
+  </div>`;
+}
+
+/* ---------- 十股表格 ---------- */
+function picksTable(list, compact){
+  if(!list.length) return '<p class="note">目前無符合條件的標的。</p>';
+  const tag=a=>`<span class="tag ${a==='買進'?'t-buy':a==='續抱'?'t-hold':a==='賣出'?'t-sell':'t-avoid'}">${a}</span>`;
+  if(compact){
+    return table(['#','股票','動作','收盤','分數','12-1月動能','距200日線'], list.map((r,i)=>`<tr><td>${r.rank||i+1}</td><td class="l">${r.code} ${r.name}</td><td>${tag(r.action)}</td><td>${num(r.close)}</td><td>${num(r.score,1)}</td><td>${retCell(r.mom12)}</td><td>${retCell(r.bias200)}</td></tr>`));
+  }
+  return table(['#','股票','動作','收盤','分數','12-1月動能','6-1月動能','營收年增(3M)','殖利率','年化波動','距200日線','說明'],
+    list.map((r,i)=>`<tr><td>${r.rank||i+1}</td><td class="l">${r.code} ${r.name}</td><td>${tag(r.action)}</td><td>${num(r.close)}</td><td>${num(r.score,1)}</td><td>${retCell(r.mom12)}</td><td>${retCell(r.mom6)}</td><td>${nz(r.rev)?retCell(r.rev):'—'}</td><td>${pct(r.dy)}</td><td>${pct(r.vol,0)}</td><td>${retCell(r.bias200)}</td><td class="l">${r.reason||''}</td></tr>`));
+}
+
+/* ---------- 大盤訊號頁 ---------- */
+let mkState={years:0, thr:String(M.params.threshold), seg:'all', evType:'all'};
+function renderMarket(){
+  const el=$('#tab-market');
+  el.innerHTML=`
+  <div class="card">
+    <h2>加權指數與反轉訊號</h2>
+    <div id="mk-range"></div>
+    <div id="mk-chart"></div>
+    <p class="note" style="margin:6px 0 0">▲ 藍：底部警示（≥${M.params.threshold} 項超賣指標同時成立）　▼ 橘：高點警示。縱軸為對數刻度。</p>
+    <h3>訊號分數（每日同時成立的指標數）</h3>
+    <div id="mk-score"></div>
+  </div>
+  <div class="card">
+    <h2>歷史驗證：訊號出現後的表現</h2>
+    <div class="note" style="margin-bottom:6px">訊號於收盤判定、隔日收盤進場，持有 N 個交易日。勝率＝底部訊號後上漲／高點訊號後下跌的比率。</div>
+    <div id="mk-thr"></div><div id="mk-seg"></div>
+    <div id="mk-stats"></div>
+  </div>
+  <div class="card">
+    <h2>歷次訊號明細（門檻 ${M.params.threshold} 項）</h2>
+    <div id="mk-evtype"></div>
+    <div id="mk-events"></div>
+  </div>
+  <div class="card">
+    <h2>大盤擇時策略：高點訊號賣出、底部訊號買回（以 0050 為標的）</h2>
+    <div id="mk-timing"></div>
+    <div id="mk-timing-tbl"></div>
+    <p class="note" style="margin:6px 0 0">起始持有；訊號次日收盤成交；已扣手續費、ETF 證交稅 0.1%、滑價。這是對「訊號本身是否有擇時價值」的檢驗，通常難以勝過長期持有——見下方指標。</p>
+  </div>`;
+  segButtons($('#mk-range'),[[0,'全部'],[10,'10年'],[5,'5年'],[3,'3年'],[1,'1年']],mkState.years,k=>{mkState.years=+k; drawMarketCharts();});
+  segButtons($('#mk-thr'),MK.stats.bottom?Object.keys(MK.stats.bottom).map(k=>[k,'門檻 ≥'+k+' 項']):[],mkState.thr,k=>{mkState.thr=k; drawStats();});
+  segButtons($('#mk-seg'),[['all','全期'],['is','樣本內'],['oos','樣本外（最近'+M.params.oos_years+'年）']],mkState.seg,k=>{mkState.seg=k; drawStats();});
+  segButtons($('#mk-evtype'),[['all','全部'],['bottom','只看底部'],['top','只看高點']],mkState.evType,k=>{mkState.evType=k; drawEvents();});
+  drawMarketCharts(); drawStats(); drawEvents(); drawTiming();
+}
+function drawMarketCharts(){
+  const c=MK.chart, i0=fromIndex(c.dates,mkState.years);
+  const evs=MK.stats.events, byDate={}, markers=[];
+  evs.forEach(e=>{ const lab=e.type==='bottom'?`<span style="color:var(--bot)">▲ 底部警示（${e.score}項）</span>`:`<span style="color:var(--top)">▼ 高點警示（${e.score}項）</span>`;
+    byDate[e.date]=lab+`<br><span class="note">60日後：${pct(e.fwd60,1,true)}</span>`;
+    markers.push({date:e.date,shape:e.type==='bottom'?'up':'down',color:e.type==='bottom'?'var(--bot)':'var(--top)'}); });
+  chart($('#mk-chart'),{dates:c.dates,from:i0,log:true,markers,eventsByDate:byDate,left:56,
+    series:[{name:'加權指數',color:'var(--ink)',values:c.close,width:1.5},{name:'200日線',color:'var(--amber)',values:c.ma200,width:1.3,dash:'4 3'}]});
+  chart($('#mk-score'),{dates:c.dates,from:i0,height:150,yFmt:v=>v.toFixed(0),left:30,
+    series:[{name:'底部分數',color:'var(--bot)',values:c.bottom_score,width:1.2},{name:'高點分數',color:'var(--top)',values:c.top_score,width:1.2}]});
+}
+function drawStats(){
+  const thr=mkState.thr, seg=mkState.seg, S=MK.stats;
+  const hs=M.params.horizons;
+  const mk=(kind,title)=>{
+    const rows=hs.map(h=>{ const s=S[kind][thr][seg][h], b=S.baseline[seg][h][kind];
+      return `<tr><td>${h} 日</td><td>${s.n}</td><td>${nz(s.win)?pct(s.win,0):'—'}</td><td>${retCell(s.mean)}</td><td>${retCell(s.median)}</td><td style="color:var(--sub)">${pct(b.win,0)}</td><td style="color:var(--sub)">${retCell(b.mean)}</td></tr>`; });
+    return `<h3>${title}　<span class="note">（事件數：${S[kind][thr][seg].count}）</span></h3>`+table(['持有期間','樣本數','勝率','平均報酬','中位數','基準勝率','基準平均'],rows);
+  };
+  $('#mk-stats').innerHTML=mk('bottom','▲ 底部警示後（勝率＝之後上漲）')+mk('top','▼ 高點警示後（勝率＝之後下跌）')+
+    `<p class="note" style="margin:8px 0 0">「基準」＝同一期間任何一天進場的結果。訊號若無價值，結果應與基準接近。事件少於 20 次時，數字只能當參考，隨機波動就可能造成差異。</p>`;
+}
+function drawEvents(){
+  let evs=MK.stats.events.slice().reverse();
+  if(mkState.evType!=='all') evs=evs.filter(e=>e.type===mkState.evType);
+  evs=evs.slice(0,40);
+  const rows=evs.map(e=>`<tr><td>${e.date}</td><td class="l"><span class="tag" style="color:var(--${e.type==='bottom'?'bot':'top'})">${e.type==='bottom'?'▲ 底部':'▼ 高點'}</span></td><td>${e.score}</td><td>${num(e.close,0)}</td><td>${retCell(e.fwd20)}</td><td>${retCell(e.fwd60)}</td><td>${retCell(e.fwd120)}</td></tr>`);
+  $('#mk-events').innerHTML=table(['日期','類型','分數','指數','+20日','+60日','+120日'],rows)+'<p class="note" style="margin:6px 0 0">最多顯示最近 40 筆。</p>';
+}
+function drawTiming(){
+  const t=MK.timing, i0=0;
+  const marks=t.trades.map(x=>({date:x.date,shape:x.action==='buy'?'up':'down',color:x.action==='buy'?'var(--bot)':'var(--top)'}));
+  chart($('#mk-timing'),{dates:t.dates,from:i0,log:true,yFmt:v=>v.toFixed(1)+'x',markers:marks,left:46,
+    series:[{name:'訊號擇時',color:'var(--blue)',values:t.equity,tipFmt:v=>v.toFixed(2)+'x'},{name:'0050 買進持有',color:'var(--gray)',values:t.buyhold,tipFmt:v=>v.toFixed(2)+'x'}]});
+  const m=t.metrics, row=(l,a,b,c,d)=>`<tr><td>${l}</td><td>${a}</td><td>${b}</td><td>${c}</td><td>${d}</td></tr>`;
+  $('#mk-timing-tbl').innerHTML=table(['','擇時 全期','買進持有 全期','擇時 樣本外','買進持有 樣本外'],[
+    row('年化報酬',pct(m.strategy.cagr),pct(m.buyhold.cagr),pct(m.strategy_oos.cagr),pct(m.buyhold_oos.cagr)),
+    row('最大回撤',pct(m.strategy.mdd,0),pct(m.buyhold.mdd,0),pct(m.strategy_oos.mdd,0),pct(m.buyhold_oos.mdd,0)),
+    row('夏普比率',num(m.strategy.sharpe),num(m.buyhold.sharpe),num(m.strategy_oos.sharpe),num(m.buyhold_oos.sharpe)),
+    row('交易次數（買+賣）',m.trades,'—','—','—')]);
+}
+
+/* ---------- 十股建議頁 ---------- */
+function renderStocks(){
+  const P=ST.picks, el=$('#tab-stocks');
+  const hist=ST.history.map(h=>`<tr><td>${h.date}</td><td class="l" style="white-space:normal">${h.holdings.map(x=>x.code+' '+x.name).join('、')}</td><td class="l" style="white-space:normal">${h.bought.join('、')||'—'}</td><td class="l" style="white-space:normal">${h.sold.join('、')||'—'}</td></tr>`);
+  el.innerHTML=`
+  <div class="card">
+    <h2>買進／續抱：綜合分數前 ${M.params.top_n} 名（截至 ${P.as_of}）</h2>
+    <p class="note" style="margin:0 0 8px">股票池 ${P.universe_size} 檔中，符合「還原價 > 200 日線、60 日均成交值達標」的有 ${P.eligible_size} 檔。等權重持有，每月底檢視、隔日收盤執行。「續抱」＝上次月底決策已持有。</p>
+    ${picksTable(P.buy,false)}
+  </div>
+  <div class="card">
+    <h2>賣出：上次持股中已不符條件者</h2>
+    ${P.sell.length?picksTable(P.sell,false):'<p class="note">目前沒有需要賣出的標的（上次持股皆仍符合續抱條件）。</p>'}
+    <p class="note" style="margin:8px 0 0">賣出規則：月底排名掉出前 ${M.params.keep_rank} 名，或還原價跌破 200 日線。</p>
+  </div>
+  <div class="card">
+    <h2>避開：綜合分數墊底 10 名</h2>
+    <details><summary>展開查看</summary>${picksTable(P.avoid,false)}</details>
+  </div>
+  <div class="card">
+    <h2>綜合分數怎麼算？</h2>
+    <div class="prose"><ul>
+      <li><b>動能 ${pct(M.params.factor_weights.momentum,0)}</b>：12-1 月與 6-1 月報酬（排除最近一個月，避免短線反轉雜訊）的股票池百分位。</li>
+      <li><b>營收 ${pct(M.params.factor_weights.revenue,0)}</b>：近 3 個月營收年增率均值${ST.revenue_factor?'':'（本次未取得資料，已略過並重新分配權重）'}。公布時點保守取次月 11 日之後才使用。</li>
+      <li><b>殖利率 ${pct(M.params.factor_weights.dividend,0)}</b>：近 12 個月現金股利／股價。</li>
+      <li><b>低波動 ${pct(M.params.factor_weights.lowvol,0)}</b>：60 日年化波動率越低越好。</li>
+    </ul><p class="note">權重為事先設定的常見配置，沒有針對回測最佳化。分數 0~100，是在股票池內的相對排名，不是目標價。</p></div>
+  </div>
+  <div class="card">
+    <h2>近 12 個月持股變化</h2>
+    <details><summary>展開查看</summary>${table(['月底決策日','持股','新買進','賣出'],hist)}</details>
+  </div>`;
+}
+
+/* ---------- 回測績效頁 ---------- */
+let perfState={years:0, seg:'full'};
+function renderPerf(){
+  const el=$('#tab-perf');
+  el.innerHTML=`
+  <div class="card">
+    <h2>淨值曲線（起點＝1，對數刻度）</h2>
+    <div id="pf-range"></div><div id="pf-eq"></div>
+    <h3>回撤</h3><div id="pf-dd"></div>
+  </div>
+  <div class="card">
+    <h2>績效指標</h2>
+    <div id="pf-seg"></div><div id="pf-metrics"></div>
+    <p class="note" style="margin:6px 0 0">樣本內＝${M.backtest_start} ~ ${M.oos_start}；樣本外＝${M.oos_start} 之後。參數未針對任何一段調整，樣本外是用來檢查績效是否只在特定年代成立。</p>
+  </div>
+  <div class="card">
+    <h2>敏感度：持股檔數改變，結果穩不穩？</h2>
+    <div id="pf-sens"></div>
+    <p class="note" style="margin:6px 0 0">若只有某一個檔數特別好，多半是巧合。年換手率＝每年買賣金額占資產比例的一半，越高越吃成本。</p>
+  </div>`;
+  segButtons($('#pf-range'),[[0,'全部'],[10,'10年'],[5,'5年'],[3,'3年']],perfState.years,k=>{perfState.years=+k; drawPerfCharts();});
+  segButtons($('#pf-seg'),[['full','全期'],['is','樣本內'],['oos','樣本外']],perfState.seg,k=>{perfState.seg=k; drawPerfTable();});
+  drawPerfCharts(); drawPerfTable();
+  $('#pf-sens').innerHTML=table(['持股檔數','年化報酬','最大回撤','夏普','樣本外年化','年換手率'],ST.sensitivity.map(s=>`<tr style="${s.top_n===M.params.top_n?'font-weight:700':''}"><td>${s.top_n} 檔${s.top_n===M.params.top_n?'（採用）':''}</td><td>${pct(s.cagr)}</td><td>${pct(s.mdd,0)}</td><td>${num(s.sharpe)}</td><td>${pct(s.oos_cagr)}</td><td>${num(s.turnover,1)}x</td></tr>`));
+}
+function drawPerfCharts(){
+  const i0=fromIndex(ST.dates,perfState.years);
+  const f=v=>v.toFixed(1)+'x', tf=v=>v.toFixed(2)+'x';
+  chart($('#pf-eq'),{dates:ST.dates,from:i0,log:true,yFmt:f,left:46,series:[
+    {name:'選股策略（含成本）',color:'var(--blue)',values:ST.equity,width:1.9,tipFmt:tf},
+    {name:'0050 買進持有',color:'var(--gray)',values:ST.benchmark,tipFmt:tf},
+    {name:'股票池等權重（未計成本）',color:'var(--amber)',values:ST.equal_weight,width:1.3,dash:'4 3',tipFmt:tf}]});
+  chart($('#pf-dd'),{dates:ST.dates,from:i0,height:170,maxZero:true,yFmt:v=>(v*100).toFixed(0)+'%',left:44,series:[
+    {name:'選股策略',color:'var(--blue)',values:ST.dd_strategy,fill:true,tipFmt:v=>pct(v)},
+    {name:'0050',color:'var(--gray)',values:ST.dd_benchmark,width:1.2,tipFmt:v=>pct(v)}]});
+}
+function drawPerfTable(){
+  const sg=perfState.seg, m=ST.metrics, a=m.strategy[sg], b=m.benchmark[sg], c=m.equal_weight[sg];
+  const row=(l,fn)=>`<tr><td>${l}</td><td>${fn(a)}</td><td>${fn(b)}</td><td>${fn(c)}</td></tr>`;
+  $('#pf-metrics').innerHTML=table(['','選股策略','0050','等權重股票池'],[
+    row('總報酬',x=>retCell(x.total,0)), row('年化報酬',x=>pct(x.cagr)), row('年化波動',x=>pct(x.vol)),
+    row('夏普比率',x=>num(x.sharpe)), row('最大回撤',x=>pct(x.mdd,0)), row('Calmar（年化/回撤）',x=>num(x.calmar)),
+    `<tr><td>年換手率（策略）</td><td>${num(m.turnover_annual,1)}x</td><td>—</td><td>—</td></tr>`]);
+}
+
+/* ---------- 方法與風險 ---------- */
+function renderMethod(){
+  const p=M.params;
+  $('#tab-method').innerHTML=`<div class="card prose">
+  <h2>方法說明</h2>
+  <h3>1. 資料</h3>
+  <ul><li>價量、還原價、股利：Yahoo Finance（加權指數 ^TWII、0050、${M.universe_size} 檔股票池）。</li>
+  <li>融資維持率、月營收：FinMind 免費 API（取不到時自動略過，頁首會標示）。</li></ul>
+  <h3>2. 大盤反轉訊號（計分制）</h3>
+  <p>底部：RSI 超賣、跌深（低於 200 日線 8%）、距一年高點回落 15%、KD 低檔、跌破布林下軌、融資維持率處於低檔。高點：RSI 超買、乖離過大（高於 200 日線 15%）、KD 高檔、突破布林上軌、價創高但 RSI 背離、融資維持率處於高檔。單一指標容易鈍化，所以只在「同時成立 ≥${p.threshold} 項」時才算警示，且兩次同類事件至少間隔 ${p.cooldown} 個交易日。</p>
+  <p>驗證方式：訊號日收盤判定、<b>隔日收盤</b>進場，統計持有 ${p.horizons.join('/')} 個交易日的結果，並與「任一天進場」的基準比較，再拆成樣本內／樣本外。</p>
+  <h3>3. 個股選股與回測</h3>
+  <ul><li>每月底計算綜合分數，隔日收盤換股；等權重持有 ${p.top_n} 檔；已持有者排名在 ${p.keep_rank} 名內續抱以降低換手。</li>
+  <li>進場條件：還原價 > 200 日線、60 日均成交值 ≥ 5,000 萬元。</li>
+  <li>成本：手續費 ${(p.commission*100).toFixed(4)}%（雙邊，未打折）、證交稅 ${(p.tax_stock*100).toFixed(1)}%（賣出）、滑價 ${(p.slippage*100).toFixed(1)}%（單邊）。大盤擇時以 0050 交易，證交稅 ${(p.tax_etf*100).toFixed(1)}%。</li></ul>
+  <h2>已知限制（請務必閱讀）</h2>
+  <ul>
+  <li><b>存活者偏差</b>：股票池是「現在」的大型股名單，等於事後挑出活到今天的強者，回測績效會偏高。真實操作無法事先知道誰會存活。</li>
+  <li><b>訊號樣本少</b>：15 年只有數十次事件，且常群聚在同一波行情，統計力有限。請以樣本外與基準對照判讀，不要只看漂亮的勝率。</li>
+  <li><b>資料窺探</b>：指標門檻採通用慣例值、未最佳化，但設計流程難免受「看過歷史」影響。唯一可靠的檢驗是未來的實盤／紙上交易。</li>
+  <li><b>交易可行性</b>：未模擬漲跌停無法成交、大額衝擊成本、融資券限制；個股以收盤價成交為假設。</li>
+  <li><b>資料品質</b>：Yahoo 與 FinMind 為免費來源，可能有缺漏或錯誤，股利還原可能與實際不同。</li>
+  <li><b>市場結構改變</b>：過去有效的規律不保證延續（例如 2020 年後散戶與 ETF 資金結構的改變）。</li>
+  </ul>
+  <h2>如何使用比較安全？</h2>
+  <ul><li>把大盤訊號當成「風險儀表板」：決定分批加碼或減碼的節奏，而非全進全出。</li>
+  <li>個股清單當成「研究起點」：再看基本面、產業與自己的風險承受度。單一個股建議不超過資金的 10%。</li>
+  <li>先以小額或紙上交易追蹤 6~12 個月，確認與回測的落差。</li></ul>
+  <p class="note">本頁僅為量化研究與教學用途，不是投資建議，作者不對任何投資損益負責。</p>
+  </div>`;
+}
+
+const renderers={overview:renderOverview,market:renderMarket,stocks:renderStocks,perf:renderPerf,method:renderMethod};
+const redraw={market:()=>{drawMarketCharts();drawTiming();},perf:drawPerfCharts};
+let rt; window.addEventListener('resize',()=>{ clearTimeout(rt); rt=setTimeout(()=>{ const t=location.hash.slice(1)||'overview'; if(redraw[t]&&rendered[t]) redraw[t](); },150); });
+show(location.hash.slice(1)||'overview');
+})();
+</script>
+</body>
+</html>
