@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import math
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 import numpy as np
@@ -77,6 +78,36 @@ def _series_pack(s: pd.Series, nd: int = 4) -> list:
     return [None if v != v else round(float(v), nd) for v in s.values]
 
 
+def data_quality(D: dict, adj: pd.DataFrame, bench_raw: pd.Series, bench: pd.Series) -> dict:
+    """掃描單日漲跌幅 > 15% 的資料點（台股漲跌幅限制 10%，超過多半是分割、減資或資料錯誤），並記錄基準最大回撤的位置。"""
+    items = []
+
+    def scan(name: str, s: pd.Series) -> None:
+        r = s.dropna().pct_change().dropna()
+        for d, v in r[r.abs() > 0.15].items():
+            items.append({"name": name, "date": d.strftime("%Y-%m-%d"), "ret": float(v)})
+
+    scan("加權指數", D["index"]["close"])
+    if D["etf"] is not None:
+        scan("0050", D["etf"])
+    for c in adj.columns:
+        scan(f"{NAMES.get(c, c)}({c})", adj[c])
+    items.sort(key=lambda x: -abs(x["ret"]))
+
+    dd = bench / bench.cummax() - 1
+    t = dd.idxmin()
+    pk = bench.loc[:t].idxmax()
+    etf_mdd = {
+        "peak": pk.strftime("%Y-%m-%d"), "trough": t.strftime("%Y-%m-%d"), "mdd": float(dd.min()),
+        "peak_price": float(bench_raw.loc[pk]), "trough_price": float(bench_raw.loc[t]),
+    }
+    log(f"資料品質：單日變動 >15% 的資料點 {len(items)} 筆")
+    for it in items[:15]:
+        log(f"  {it['name']} {it['date']} {it['ret']:+.1%}")
+    log(f"基準最大回撤 {etf_mdd['mdd']:.1%}：{etf_mdd['peak']}（{etf_mdd['peak_price']:.2f}）→ {etf_mdd['trough']}（{etf_mdd['trough_price']:.2f}）")
+    return {"count": len(items), "top": items[:25], "etf_mdd": etf_mdd}
+
+
 def run(raw_dir: Path, out_dir: Path = OUT_DIR) -> Path:
     D = load_raw(raw_dir)
     meta = D["meta"]
@@ -135,6 +166,7 @@ def run(raw_dir: Path, out_dir: Path = OUT_DIR) -> Path:
     dates_common = eq.index.intersection(bench.index).intersection(ew.index)
     eq, bench, ew = eq.loc[dates_common], bench.loc[dates_common], ew.loc[dates_common]
     eq, bench, ew = eq / eq.iloc[0], bench / bench.iloc[0], ew / ew.iloc[0]
+    dq = data_quality(D, adj, bench_src.reindex(common).ffill(), bench)
 
     def seg_metrics(s):
         return {"full": M.metrics(s), "is": M.metrics(s.loc[:split]), "oos": M.metrics(s.loc[split:])}
@@ -180,7 +212,7 @@ def run(raw_dir: Path, out_dir: Path = OUT_DIR) -> Path:
 
     result = {
         "meta": {
-            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "generated_at": datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y-%m-%d %H:%M"),
             "data_through": end.strftime("%Y-%m-%d"),
             "backtest_start": bt_start.strftime("%Y-%m-%d"),
             "oos_start": split.strftime("%Y-%m-%d"),
@@ -188,6 +220,7 @@ def run(raw_dir: Path, out_dir: Path = OUT_DIR) -> Path:
             "finmind_margin": bool(D["margin"] is not None),
             "finmind_revenue": bool(P.has_rev),
             "universe_size": int(adj.shape[1]),
+            "data_quality": dq,
             "params": {
                 "top_n": C.TOP_N, "keep_rank": C.KEEP_RANK, "factor_weights": C.FACTOR_WEIGHTS,
                 "commission": C.COMMISSION * C.FEE_DISCOUNT, "tax_stock": C.TAX_STOCK, "tax_etf": C.TAX_ETF,

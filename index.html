@@ -140,6 +140,10 @@ const notes = [];
 if(M.demo) notes.push('<b>⚠ 這是 DEMO 示範資料（電腦合成，不是真實行情）。</b>所有數字、訊號與選股清單都沒有意義，只用來展示介面。請在 GitHub 執行 <code>python run_all.py</code> 或啟用 Actions，換成真實資料。');
 if(!M.finmind_margin) notes.push('融資維持率資料未取得，大盤訊號只使用價量指標（5 項計分）。');
 if(!M.finmind_revenue) notes.push('月營收資料未取得，個股選股未使用營收因子。');
+(function(){ const D=M.data_quality; if(!D) return;
+  if(D.count>0) notes.push(`<b>資料品質提醒：</b>偵測到 ${D.count} 筆單日漲跌幅超過 15% 的資料點（台股單日漲跌幅限制為 10%），可能是股票分割或資料錯誤，會影響績效數字。明細請見「方法與風險」頁底部。`);
+  const e=D.etf_mdd; if(e&&e.mdd<-0.5) notes.push(`<b>0050 數字疑似異常：</b>全期最大回撤 ${(e.mdd*100).toFixed(0)}%（${e.peak} 價格 ${e.peak_price.toFixed(2)} → ${e.trough} 價格 ${e.trough_price.toFixed(2)}），遠大於實際情況。0050 的「全期」對照請勿採信，請以樣本外為準。`);
+})();
 $('#banner').innerHTML = notes.map(t=>`<div class="demo">${t}</div>`).join('');
 
 /* ---------- tabs ---------- */
@@ -281,9 +285,11 @@ function renderOverview(){
   const sm=ST.metrics, f=sm.strategy.full, bm=sm.benchmark.full, fo=sm.strategy.oos, bo=sm.benchmark.oos;
   const beat=nz(fo.cagr)&&nz(bo.cagr)&&fo.cagr>bo.cagr, beatSh=nz(fo.sharpe)&&nz(bo.sharpe)&&fo.sharpe>bo.sharpe;
   const sensN=ST.sensitivity.length, sensOk=ST.sensitivity.filter(s=>nz(s.oos_cagr)&&nz(bo.cagr)&&s.oos_cagr>bo.cagr).length;
+  const gap=(nz(fo.cagr)&&nz(bo.cagr))?fo.cagr-bo.cagr:null;
   let sv='mid', stxt='';
   if(!beat){ sv='bad'; stxt='樣本外沒有勝過 0050。'; }
-  else if(beatSh&&sensOk>=Math.ceil(sensN*0.75)){ sv='ok'; stxt='樣本外仍優於 0050，且改變持股檔數後結果相近，穩健性尚可。'; }
+  else if(gap<0.02){ sv='mid'; stxt=`樣本外年化只比 0050 高約 ${(gap*100).toFixed(1)} 個百分點，差距很小；考慮存活者偏差後，幾乎不能證明優於 0050。`; }
+  else if(beatSh&&sensOk>=Math.ceil(sensN*0.75)){ sv='ok'; stxt='樣本外明顯優於 0050，且改變持股檔數後結果相近；但仍有存活者偏差，請打折看待。'; }
   else { sv='mid'; stxt='樣本外年化略勝 0050，但夏普或不同持股檔數的結果不一致，請審慎看待。'; }
   el.innerHTML=`
   <div class="card">
@@ -510,6 +516,14 @@ function drawPerfTable(){
     `<tr><td>年換手率（策略）</td><td>${num(m.turnover_annual,1)}x</td><td>—</td><td>—</td></tr>`]);
 }
 
+function dqHtml(){
+  const D=M.data_quality; if(!D) return '';
+  const e=D.etf_mdd;
+  const rows=(D.top||[]).slice(0,15).map(x=>`<tr><td class="l">${x.name}</td><td>${x.date}</td><td>${retCell(x.ret,1)}</td></tr>`);
+  return `<h2>資料品質檢查</h2><p>單日漲跌幅超過 15% 的資料點共 <b>${D.count}</b> 筆（台股單日漲跌幅限制為 10%，超過通常是股票分割、減資或資料錯誤）。</p>`+
+    (e?`<p>基準（0050）最大回撤 <b>${pct(e.mdd,0)}</b>：高點 ${e.peak}（價格 ${num(e.peak_price)}）→ 低點 ${e.trough}（價格 ${num(e.trough_price)}）。</p>`:'')+
+    (rows.length?table(['標的','日期','單日變動'],rows):'');
+}
 /* ---------- 方法與風險 ---------- */
 function renderMethod(){
   const p=M.params;
@@ -540,6 +554,7 @@ function renderMethod(){
   <ul><li>把大盤訊號當成「風險儀表板」：決定分批加碼或減碼的節奏，而非全進全出。</li>
   <li>個股清單當成「研究起點」：再看基本面、產業與自己的風險承受度。單一個股建議不超過資金的 10%。</li>
   <li>先以小額或紙上交易追蹤 6~12 個月，確認與回測的落差。</li></ul>
+  ${dqHtml()}
   <p class="note">本頁僅為量化研究與教學用途，不是投資建議，作者不對任何投資損益負責。</p>
   </div>`;
 }
