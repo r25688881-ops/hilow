@@ -32,6 +32,7 @@ def build_indicators(idx: pd.DataFrame, margin: pd.Series | None) -> pd.DataFram
     o["close"] = c
     o["ma200"] = c.rolling(200, min_periods=200).mean()
     o["bias200"] = c / o["ma200"] - 1
+    o["ma20"] = c.rolling(20, min_periods=20).mean()
     o["rsi14"] = rsi(c, 14)
 
     ll, hh = l.rolling(9, min_periods=9).min(), h.rolling(9, min_periods=9).max()
@@ -269,3 +270,37 @@ def current_state(ind: pd.DataFrame, flags: pd.DataFrame, brules: list, trules: 
             "margin_pct": num(row_i["margin_pct"]) if "margin_pct" in ind.columns else None,
         },
     }
+
+
+# ------------------------- 確認型訊號（事先設定規則，只測一次，不調參） -------------------------
+# 高點確認：近 CONFIRM_LOOKBACK 日內出現過「高點分數 >= 門檻」，且今天收盤由上往下跌破 20 日線。
+# 底部確認：近 CONFIRM_LOOKBACK 日內出現過「底部分數 >= 門檻」，且今天收盤由下往上站上 20 日線。
+# 概念：先等過熱/超賣，再等「價格自己先轉向」才發出訊號，避免在趨勢中途誤報。
+
+def confirm_events(ind: pd.DataFrame, flags: pd.DataFrame, kind: str) -> list[int]:
+    c, ma20 = ind["close"], ind["ma20"]
+    score = flags["top_score" if kind == "top" else "bottom_score"]
+    recent = (score >= C.DEFAULT_THRESHOLD).astype(int).rolling(C.CONFIRM_LOOKBACK, min_periods=1).max() > 0
+    pc, pm = c.shift(1), ma20.shift(1)
+    cross = ((c < ma20) & (pc >= pm)) if kind == "top" else ((c > ma20) & (pc <= pm))
+    cond = (recent & cross).fillna(False).values
+    events, last = [], -10**9
+    for i in range(len(cond)):
+        if cond[i] and i - last >= C.COOLDOWN:
+            events.append(i)
+            last = i
+    return events
+
+
+def confirm_statistics(ind: pd.DataFrame, flags: pd.DataFrame, bt_start: pd.Timestamp, split: pd.Timestamp) -> dict:
+    close = ind["close"].values
+    dates = ind.index
+    out: dict = {"lookback": C.CONFIRM_LOOKBACK}
+    for kind, bearish in [("bottom", False), ("top", True)]:
+        ev = [i for i in confirm_events(ind, flags, kind) if dates[i] >= bt_start]
+        out[kind] = {"last": dates[ev[-1]].strftime("%Y-%m-%d") if ev else None}
+        for seg in ["all", "is", "oos"]:
+            sel = ev if seg == "all" else [i for i in ev if (dates[i] <= split) == (seg == "is")]
+            out[kind][seg] = {str(h): _agg([forward_returns(close, i, [h])[h] for i in sel], bearish) for h in C.HORIZONS}
+            out[kind][seg]["count"] = len(sel)
+    return out

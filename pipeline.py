@@ -93,6 +93,7 @@ def run(raw_dir: Path, out_dir: Path = OUT_DIR) -> Path:
     ind = S.build_indicators(idx, D["margin"])
     flags, brules, trules = S.compute_scores(ind)
     stats = S.signal_statistics(ind, flags, bt_start, split)
+    stats["confirm"] = S.confirm_statistics(ind, flags, bt_start, split)
     etf = D["etf"] if D["etf"] is not None else idx["close"]
     timing = S.timing_strategy(ind, flags, etf, bt_start)
     state = S.current_state(ind, flags, brules, trules)
@@ -192,7 +193,7 @@ def run(raw_dir: Path, out_dir: Path = OUT_DIR) -> Path:
                 "commission": C.COMMISSION * C.FEE_DISCOUNT, "tax_stock": C.TAX_STOCK, "tax_etf": C.TAX_ETF,
                 "slippage": C.SLIPPAGE, "threshold": C.DEFAULT_THRESHOLD, "cooldown": C.COOLDOWN,
                 "horizons": C.HORIZONS, "thresholds": C.THRESHOLDS, "oos_years": C.OOS_YEARS,
-                "backtest_years": C.BACKTEST_YEARS,
+                "backtest_years": C.BACKTEST_YEARS, "confirm_lookback": C.CONFIRM_LOOKBACK,
             },
         },
         "market": {"state": state, "chart": index_chart, "stats": stats, "timing": timing_out},
