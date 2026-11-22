@@ -232,6 +232,7 @@ def run(raw_dir: Path, out_dir: Path = OUT_DIR) -> Path:
                          "oos_cagr": M.metrics(e.loc[split:]).get("cagr"), "mdd": M.metrics(e).get("mdd")})
     log("隨機選股對照中…")
     rnd = M.random_pick_test(P, main, bt_start, split, pit_top=C.PIT_TOP)
+    log(f"隨機選股對照完成（{C.RANDOM_SIMS} 次）")
     bias = {"pit_top": C.PIT_TOP, "sens": pit_rows, "random": rnd}
 
     picks = M.current_picks(P, main["holdings"])

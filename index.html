@@ -106,12 +106,14 @@ footer{color:var(--sub);font-size:12.5px;margin-top:20px}
     <button data-t="market">大盤訊號</button>
     <button data-t="stocks">十股建議</button>
     <button data-t="perf">回測績效</button>
+    <button data-t="guide">使用建議</button>
     <button data-t="method">方法與風險</button>
   </nav>
   <section class="tab on" id="tab-overview"></section>
   <section class="tab" id="tab-market"></section>
   <section class="tab" id="tab-stocks"></section>
   <section class="tab" id="tab-perf"></section>
+  <section class="tab" id="tab-guide"></section>
   <section class="tab" id="tab-method"></section>
   <footer>歷史回測不代表未來績效；本頁內容僅為量化研究與教學用途，不構成任何投資建議。投資有風險，請自行評估並承擔結果。</footer>
 </div>
@@ -148,7 +150,7 @@ if(!M.finmind_revenue) notes.push('月營收資料未取得，個股選股未使
 $('#banner').innerHTML = notes.map(t=>`<div class="demo">${t}</div>`).join('');
 
 /* ---------- tabs ---------- */
-const tabs = ['overview','market','stocks','perf','method'];
+const tabs = ['overview','market','stocks','perf','guide','method'];
 const rendered = {};
 function show(t){
   if(!tabs.includes(t)) t='overview';
@@ -285,14 +287,14 @@ function biasHtml(){
   const t1=table(['期間','選股策略','同條件等權重','超額','0050'],seg.map(([k,l])=>{ const a=m.strategy[k].cagr,b=m.equal_weight_pit[k].cagr;
     return `<tr><td>${l}</td><td>${pct(a)}</td><td>${pct(b)}</td><td>${retCell(nz(a)&&nz(b)?a-b:NaN)}</td><td>${pct(m.benchmark[k].cagr)}</td></tr>`;}));
   const t2=table(['只從成交值前 N 名選','年化（全期）','樣本內','樣本外','最大回撤'],B.sens.map(x=>`<tr style="${x.pit_top===B.pit_top?'font-weight:700':''}"><td>${x.pit_top?'前 '+x.pit_top+' 名':'不限制'}${x.pit_top===B.pit_top?'（採用）':''}</td><td>${pct(x.cagr)}</td><td>${pct(x.is_cagr)}</td><td>${pct(x.oos_cagr)}</td><td>${pct(x.mdd,0)}</td></tr>`));
-  const t3=table(['期間','策略（未計成本）','隨機選股中位數','隨機 90 百分位','策略勝過隨機的比例'],seg.map(([k,l])=>{ const r=R[k]; return r?`<tr><td>${l}</td><td>${pct(r.strategy)}</td><td>${pct(r.random_median)}</td><td>${pct(r.random_p90)}</td><td>${pct(r.percentile,0)}</td></tr>`:`<tr><td>${l}</td><td colspan="4">樣本不足</td></tr>`;}));
+  const t3=table(['期間','策略（含成本）','隨機選股中位數','隨機 90 百分位','策略勝過隨機的比例'],seg.map(([k,l])=>{ const r=R[k]; return r?`<tr><td>${l}</td><td>${pct(r.strategy)}</td><td>${pct(r.random_median)}</td><td>${pct(r.random_p90)}</td><td>${pct(r.percentile,0)}</td></tr>`:`<tr><td>${l}</td><td colspan="4">樣本不足</td></tr>`;}));
   return `<p style="margin:2px 0 8px"><span class="verdict v-${bv.v}" style="margin-left:0">${bv.text}</span></p>
     <h3>① 策略 vs 同條件等權重</h3>${t1}
-    <p class="note" style="margin:4px 0 8px">「同條件等權重」＝每月底取當時成交值前 ${B.pit_top} 名等權重持有（未計成本）。它和策略的股票池相同，差別只在有沒有用因子選股，所以「超額」才是因子的真正貢獻；與 0050 的差距則混有「挑到現在的強勢股」的成分。</p>
+    <p class="note" style="margin:4px 0 8px">「同條件等權重」＝每月底取當時成交值前 ${B.pit_top} 名等權重持有（含估計換股成本）。它和策略的股票池與成本條件相同，差別只在有沒有用因子選股，所以「超額」才是因子的真正貢獻；與 0050 的差距則混有「挑到現在的強勢股」的成分。</p>
     <h3>② 只從「當時」成交值前 N 名選股</h3>${t2}
     <p class="note" style="margin:4px 0 8px">用當時的成交值排名，近似「當時的大型股」，避免只挑到後來才變大的股票。若 N 縮小後績效大幅下滑，代表原本績效有一部分來自股票池的事後挑選。</p>
     <h3>③ 隨機選股對照（${R.sims} 次）</h3>${t3}
-    <p class="note" style="margin:4px 0 0">每月從同一個合格名單隨機抽 ${M.params.top_n} 檔，重複 ${R.sims} 次。「勝過隨機的比例」越接近 100% 越好；多半低於 90% 就不能排除只是運氣。此對照為月度近似、未計成本，只用來比較「選股方式」。</p>
+    <p class="note" style="margin:4px 0 0">用完全相同的回測引擎（同合格名單、同續抱規則、同成本），只把因子分數換成隨機數，重複 ${R.sims} 次。「勝過隨機的比例」越接近 100% 越好；低於 90% 就不能排除只是運氣。</p>
     <p class="note" style="margin:6px 0 0"><b>仍然無法消除的偏差：</b>股票池本身仍是「現在存在」的 ${M.universe_size} 檔，已下市或被併購的公司不在裡面。上面三項只能降低、無法歸零，請把績效再打折。</p>`;
 }
 
@@ -538,7 +540,7 @@ function drawPerfCharts(){
   chart($('#pf-eq'),{dates:ST.dates,from:i0,log:true,yFmt:f,left:46,series:[
     {name:'選股策略（含成本）',color:'var(--blue)',values:ST.equity,width:1.9,tipFmt:tf},
     {name:'0050 買進持有',color:'var(--gray)',values:ST.benchmark,tipFmt:tf},
-    {name:'股票池等權重（未計成本）',color:'var(--amber)',values:ST.equal_weight,width:1.3,dash:'4 3',tipFmt:tf}].concat(ST.equal_weight_pit?[{name:`同條件等權重（前${M.params.pit_top||'-'}名）`,color:'var(--bot)',values:ST.equal_weight_pit,width:1.3,dash:'2 3',tipFmt:tf}]:[])});
+    {name:'股票池等權重（未計成本）',color:'var(--amber)',values:ST.equal_weight,width:1.3,dash:'4 3',tipFmt:tf}].concat(ST.equal_weight_pit?[{name:`同條件等權重（前${M.params.pit_top||'-'}名，含估計成本）`,color:'var(--bot)',values:ST.equal_weight_pit,width:1.3,dash:'2 3',tipFmt:tf}]:[])});
   chart($('#pf-dd'),{dates:ST.dates,from:i0,height:170,maxZero:true,yFmt:v=>(v*100).toFixed(0)+'%',left:44,series:[
     {name:'選股策略',color:'var(--blue)',values:ST.dd_strategy,fill:true,tipFmt:v=>pct(v)},
     {name:'0050',color:'var(--gray)',values:ST.dd_benchmark,width:1.2,tipFmt:v=>pct(v)}]});
@@ -561,6 +563,59 @@ function dqHtml(){
     (e?`<p>基準（0050）最大回撤 <b>${pct(e.mdd,0)}</b>：高點 ${e.peak}（價格 ${num(e.peak_price)}）→ 低點 ${e.trough}（價格 ${num(e.trough_price)}）。</p>`:'')+
     (fx.length?`<h3>已自動接合的價格斷層（共 ${D.fix_count} 筆）</h3>`+table(['標的','日期','斷層變動','接合倍率'],fx):'')+
     (rows.length?`<h3>修正後仍超過 15% 的資料點</h3>`+table(['標的','日期','單日變動'],rows):'');
+}
+/* ---------- 使用建議 ---------- */
+function cfVerdict(kind){
+  const CF=MK.stats.confirm; if(!CF) return null;
+  const d=CF[kind].oos; let ok=0,bad=0,tot=0;
+  M.params.horizons.forEach(h=>{ const j=judge(d[h],MK.stats.baseline.oos[h][kind],kind); if(!j) return; tot++; if(j.v==='ok') ok++; if(j.v==='bad') bad++; });
+  if(!tot) return {key:'mid',text:'樣本不足'};
+  if(ok>=2&&bad===0) return {key:'ok',text:'樣本外優於隨機進場'};
+  if(bad>=2) return {key:'bad',text:kind==='top'?'樣本外沒有預警效果':'樣本外未優於隨機進場'};
+  return {key:'mid',text:'與隨機進場沒有明顯差異'};
+}
+function renderGuide(){
+  const vb=verdictOf('bottom','oos'), vt=verdictOf('top','oos'), cb=cfVerdict('bottom'), ct=cfVerdict('top'), bv=biasVerdict();
+  const sm=ST.metrics, so=sm.strategy.oos, bo=sm.benchmark.oos;
+  const beat=nz(so.cagr)&&nz(bo.cagr)&&so.cagr>bo.cagr+0.02;
+  const chip=(label,v)=>v?`<div style="padding:8px 0;border-bottom:1px solid var(--line,rgba(128,128,128,.25))"><div style="font-weight:600;margin-bottom:4px">${label}</div><span class="verdict v-${v.key||v.v}" style="margin-left:0;display:inline-block">${v.text}</span></div>`:'';
+  const stockV={key:beat?(bv&&bv.v==='ok'?'ok':'mid'):'bad', text: beat?(bv?bv.text:'樣本外優於 0050，但無法排除存活者偏差'):'樣本外沒有明顯勝過 0050'};
+  $('#tab-guide').innerHTML=`
+  <div class="card">
+    <h2>目前這份回測，實際支持什麼？</h2>
+    <p class="note" style="margin:0 0 6px">以下判讀是依本頁最新資料自動產生，資料更新後會跟著變。</p>
+    ${[chip('大盤底部警示',vb), chip('大盤高點警示',vt), chip('確認型底部',cb), chip('確認型高點',ct), chip('十股選股 vs 0050',stockV),
+      bv?chip('選股因子 vs 同條件等權重／隨機',bv):''].join('')}
+  </div>
+  <div class="card prose">
+    <h2>保守的使用方式</h2>
+    <ol>
+      <li><b>把大盤頁當「儀表板」，不要當買賣開關。</b>看目前 RSI、乖離、回落幅度，了解市場是過熱還是低迷，用來調整「心理預期」與「分批節奏」，而不是一次賣光或一次全買。</li>
+      <li><b>不要依高點警示賣出。</b>多頭市場裡「過熱」常是強勢的標記，歷史上警示後常繼續上漲；賣掉的人往往錯過後面的漲幅。</li>
+      <li><b>底部警示最多用來「提醒分批」。</b>若要參考，也只用小額、分多次投入，並預先決定可承受的虧損；不要用它判斷「現在就是最低點」。</li>
+      <li><b>核心部位優先用指數化方式。</b>目前證據下，0050（或成交值前段班的等權重）比這套選股更站得住腳；十股清單只當作「研究起點」，不是買進清單。</li>
+      <li><b>若仍想參考十股清單</b>：占資產比例要小、可以全部虧掉也不影響生活；一次只換月底的清單；每月只在月底後看一次。</li>
+      <li><b>先紙上追蹤 6～12 個月。</b>每月底把清單記下來，隔月比較它與 0050 的差距，再決定要不要相信它。回測好看不代表實盤好看。</li>
+    </ol>
+  </div>
+  <div class="card prose">
+    <h2>每月怎麼看（約 5 分鐘）</h2>
+    <ol>
+      <li>打開「總覽」：看大盤狀態與「過去準不準」的判讀。若判讀是「與隨機相近／沒有預警效果」，就把訊號當背景資訊。</li>
+      <li>打開「回測績效」：確認「降低存活者偏差的檢驗」是否仍是綠燈。不是綠燈，就不要加碼參考選股。</li>
+      <li>月底之後打開「十股建議」：只看「續抱／買進／賣出」的變動，不追逐單日漲跌。</li>
+      <li>把結果記下來（紙上交易），三個月後回頭比較。</li>
+    </ol>
+  </div>
+  <div class="card prose">
+    <h2>什麼證據會讓我改變看法？</h2>
+    <ul>
+      <li>確認型底部訊號在<b>樣本外</b>連續多年、至少 20 次獨立事件中，勝率與平均報酬都明顯優於隨機進場。</li>
+      <li>選股策略在<b>樣本外</b>，扣除成本後持續勝過同條件等權重，且隨機對照的百分位維持在 90% 以上。</li>
+      <li>紙上追蹤半年以上，實際表現與回測差距不大。</li>
+    </ul>
+    <p class="note">在這之前，請把本 App 視為「研究與學習工具」。僅供教學用途，不是投資建議。</p>
+  </div>`;
 }
 /* ---------- 方法與風險 ---------- */
 function renderMethod(){
@@ -597,7 +652,7 @@ function renderMethod(){
   </div>`;
 }
 
-const renderers={overview:renderOverview,market:renderMarket,stocks:renderStocks,perf:renderPerf,method:renderMethod};
+const renderers={overview:renderOverview,market:renderMarket,stocks:renderStocks,perf:renderPerf,guide:renderGuide,method:renderMethod};
 const redraw={market:()=>{drawMarketCharts();drawTiming();},perf:drawPerfCharts};
 let rt; window.addEventListener('resize',()=>{ clearTimeout(rt); rt=setTimeout(()=>{ const t=location.hash.slice(1)||'overview'; if(redraw[t]&&rendered[t]) redraw[t](); },150); });
 show(location.hash.slice(1)||'overview');
