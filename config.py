@@ -13,6 +13,10 @@ FETCH_EXTRA_DAYS = 480       # 抓資料時多抓的暖機天數（算 200 日�
 TOP_N = 10                   # 持股檔數
 KEEP_RANK = 20               # 已持有者，排名在前 KEEP_RANK 名內就續抱（降低換手）
 SENS_TOP_N = [5, 10, 15, 20] # 敏感度分析：不同持股檔數
+PIT_TOP = 50                 # 降低存活者偏差：每月只從「當時」60日成交值前 N 名中選股（None＝不限制）
+PIT_SENS = [None, 60, 50, 40, 30]  # 敏感度：不同 N
+RANDOM_SIMS = 300            # 隨機選股對照次數
+RANDOM_SEED = 42
 MIN_AVG_TURNOVER = 5e7       # 60 日平均成交值下限（新台幣），過濾流動性不足
 FACTOR_WEIGHTS = {           # 多因子權重（缺資料的因子會自動重新分配權重）
     "momentum": 0.45,        # 動能：12-1 月 與 6-1 月 報酬

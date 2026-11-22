@@ -198,9 +198,10 @@ def run(raw_dir: Path, out_dir: Path = OUT_DIR) -> Path:
     bench = bench / bench.iloc[0]
     ew = M.equal_weight_benchmark(P, start_d)
     ew = ew / ew.iloc[0]
-    dates_common = eq.index.intersection(bench.index).intersection(ew.index)
-    eq, bench, ew = eq.loc[dates_common], bench.loc[dates_common], ew.loc[dates_common]
-    eq, bench, ew = eq / eq.iloc[0], bench / bench.iloc[0], ew / ew.iloc[0]
+    ewp = M.pit_equal_weight(P, start_d, C.PIT_TOP)
+    dates_common = eq.index.intersection(bench.index).intersection(ew.index).intersection(ewp.index)
+    eq, bench, ew, ewp = eq.loc[dates_common], bench.loc[dates_common], ew.loc[dates_common], ewp.loc[dates_common]
+    eq, bench, ew, ewp = eq / eq.iloc[0], bench / bench.iloc[0], ew / ew.iloc[0], ewp / ewp.iloc[0]
     dq = data_quality(D, adj, bench_src.reindex(common).ffill(), bench, fixes)
 
     def seg_metrics(s):
@@ -210,6 +211,7 @@ def run(raw_dir: Path, out_dir: Path = OUT_DIR) -> Path:
         "strategy": seg_metrics(eq),
         "benchmark": seg_metrics(bench),
         "equal_weight": seg_metrics(ew),
+        "equal_weight_pit": seg_metrics(ewp),
         "turnover_annual": main["turnover_annual"],
     }
 
@@ -220,6 +222,17 @@ def run(raw_dir: Path, out_dir: Path = OUT_DIR) -> Path:
         m = M.metrics(e)
         sens.append({"top_n": n, "cagr": m.get("cagr"), "mdd": m.get("mdd"), "sharpe": m.get("sharpe"),
                      "oos_cagr": M.metrics(e.loc[split:]).get("cagr"), "turnover": res["turnover_annual"]})
+
+    # ---- 降低存活者偏差：PIT 流動性過濾敏感度 + 隨機選股對照 ----
+    pit_rows = []
+    for n in C.PIT_SENS:
+        res = main if n == C.PIT_TOP else M.run_backtest(P, bt_start, pit_top=n)
+        e = res["equity"]
+        pit_rows.append({"pit_top": n, "cagr": M.metrics(e).get("cagr"), "is_cagr": M.metrics(e.loc[:split]).get("cagr"),
+                         "oos_cagr": M.metrics(e.loc[split:]).get("cagr"), "mdd": M.metrics(e).get("mdd")})
+    log("隨機選股對照中…")
+    rnd = M.random_pick_test(P, main, bt_start, split, pit_top=C.PIT_TOP)
+    bias = {"pit_top": C.PIT_TOP, "sens": pit_rows, "random": rnd}
 
     picks = M.current_picks(P, main["holdings"])
     hist = []
@@ -236,6 +249,8 @@ def run(raw_dir: Path, out_dir: Path = OUT_DIR) -> Path:
         "equity": _series_pack(eq, 4),
         "benchmark": _series_pack(bench, 4),
         "equal_weight": _series_pack(ew, 4),
+        "equal_weight_pit": _series_pack(ewp, 4),
+        "bias": bias,
         "dd_strategy": _series_pack(M.drawdown(eq), 4),
         "dd_benchmark": _series_pack(M.drawdown(bench), 4),
         "metrics": stock_metrics,
@@ -261,7 +276,7 @@ def run(raw_dir: Path, out_dir: Path = OUT_DIR) -> Path:
                 "commission": C.COMMISSION * C.FEE_DISCOUNT, "tax_stock": C.TAX_STOCK, "tax_etf": C.TAX_ETF,
                 "slippage": C.SLIPPAGE, "threshold": C.DEFAULT_THRESHOLD, "cooldown": C.COOLDOWN,
                 "horizons": C.HORIZONS, "thresholds": C.THRESHOLDS, "oos_years": C.OOS_YEARS,
-                "backtest_years": C.BACKTEST_YEARS, "confirm_lookback": C.CONFIRM_LOOKBACK,
+                "backtest_years": C.BACKTEST_YEARS, "pit_top": C.PIT_TOP, "random_sims": C.RANDOM_SIMS, "confirm_lookback": C.CONFIRM_LOOKBACK,
             },
         },
         "market": {"state": state, "chart": index_chart, "stats": stats, "timing": timing_out},

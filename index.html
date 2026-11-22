@@ -267,6 +267,35 @@ function verdictOf(kind,seg){
   return {key:'mid',text:'與隨機進場沒有明顯差異'};
 }
 
+/* ---------- 存活者偏差檢驗 ---------- */
+function biasVerdict(){
+  const B=ST.bias, pe=ST.metrics.equal_weight_pit; if(!B||!B.random||!pe) return null;
+  const R=B.random, so=ST.metrics.strategy.oos, po=pe.oos, si=ST.metrics.strategy.is, pi=pe.is;
+  if(!R.oos||!R.is||!nz(so.cagr)||!nz(po.cagr)) return null;
+  const ex=so.cagr-po.cagr, exI=nz(si.cagr)&&nz(pi.cagr)?si.cagr-pi.cagr:null;
+  let v='mid', text='';
+  if(R.oos.percentile<0.6||ex<=0){ v='bad'; text='與同條件等權重或隨機選股相比，選股因子沒有明顯加分。'; }
+  else if(R.oos.percentile>=0.9&&R.is.percentile>=0.9&&ex>0.02){ v='ok'; text='贏過同條件等權重，也優於九成以上的隨機選股（樣本內外皆然）。'; }
+  else { v='mid'; text=`略優於同條件等權重（樣本外約 +${(ex*100).toFixed(1)} 個百分點），但在隨機選股中只排到第 ${Math.round(R.oos.percentile*100)} 百分位，不算顯著。`; }
+  return {v,text,ex,exI,R,B};
+}
+function biasHtml(){
+  const bv=biasVerdict(); if(!bv) return '<p class="note">這個區塊需要等 Actions 重新執行後才會有資料。</p>';
+  const {R,B,ex}=bv, m=ST.metrics, seg=[['is','樣本內'],['oos','樣本外'],['full','全期']];
+  const t1=table(['期間','選股策略','同條件等權重','超額','0050'],seg.map(([k,l])=>{ const a=m.strategy[k].cagr,b=m.equal_weight_pit[k].cagr;
+    return `<tr><td>${l}</td><td>${pct(a)}</td><td>${pct(b)}</td><td>${retCell(nz(a)&&nz(b)?a-b:NaN)}</td><td>${pct(m.benchmark[k].cagr)}</td></tr>`;}));
+  const t2=table(['只從成交值前 N 名選','年化（全期）','樣本內','樣本外','最大回撤'],B.sens.map(x=>`<tr style="${x.pit_top===B.pit_top?'font-weight:700':''}"><td>${x.pit_top?'前 '+x.pit_top+' 名':'不限制'}${x.pit_top===B.pit_top?'（採用）':''}</td><td>${pct(x.cagr)}</td><td>${pct(x.is_cagr)}</td><td>${pct(x.oos_cagr)}</td><td>${pct(x.mdd,0)}</td></tr>`));
+  const t3=table(['期間','策略（未計成本）','隨機選股中位數','隨機 90 百分位','策略勝過隨機的比例'],seg.map(([k,l])=>{ const r=R[k]; return r?`<tr><td>${l}</td><td>${pct(r.strategy)}</td><td>${pct(r.random_median)}</td><td>${pct(r.random_p90)}</td><td>${pct(r.percentile,0)}</td></tr>`:`<tr><td>${l}</td><td colspan="4">樣本不足</td></tr>`;}));
+  return `<p style="margin:2px 0 8px"><span class="verdict v-${bv.v}" style="margin-left:0">${bv.text}</span></p>
+    <h3>① 策略 vs 同條件等權重</h3>${t1}
+    <p class="note" style="margin:4px 0 8px">「同條件等權重」＝每月底取當時成交值前 ${B.pit_top} 名等權重持有（未計成本）。它和策略的股票池相同，差別只在有沒有用因子選股，所以「超額」才是因子的真正貢獻；與 0050 的差距則混有「挑到現在的強勢股」的成分。</p>
+    <h3>② 只從「當時」成交值前 N 名選股</h3>${t2}
+    <p class="note" style="margin:4px 0 8px">用當時的成交值排名，近似「當時的大型股」，避免只挑到後來才變大的股票。若 N 縮小後績效大幅下滑，代表原本績效有一部分來自股票池的事後挑選。</p>
+    <h3>③ 隨機選股對照（${R.sims} 次）</h3>${t3}
+    <p class="note" style="margin:4px 0 0">每月從同一個合格名單隨機抽 ${M.params.top_n} 檔，重複 ${R.sims} 次。「勝過隨機的比例」越接近 100% 越好；多半低於 90% 就不能排除只是運氣。此對照為月度近似、未計成本，只用來比較「選股方式」。</p>
+    <p class="note" style="margin:6px 0 0"><b>仍然無法消除的偏差：</b>股票池本身仍是「現在存在」的 ${M.universe_size} 檔，已下市或被併購的公司不在裡面。上面三項只能降低、無法歸零，請把績效再打折。</p>`;
+}
+
 /* ---------- 總覽 ---------- */
 function renderOverview(){
   const st=MK.state, el=$('#tab-overview');
@@ -315,6 +344,7 @@ function renderOverview(){
   <div class="card">
     <h2>選股策略是否值得參考？</h2>
     <p style="margin:2px 0 8px"><span class="verdict v-${sv}" style="margin-left:0">${stxt}</span></p>
+    ${(()=>{const b=biasVerdict(); return b?`<p style="margin:2px 0 8px"><b>降低存活者偏差後：</b><span class="verdict v-${b.v}" style="margin-left:6px">${b.text}</span></p>`:'';})()}
     <div class="grid g4">
       <div class="kpi"><div class="l">年化報酬（全期）</div><div class="v">${pct(f.cagr)}</div><div class="s">0050：${pct(bm.cagr)}</div></div>
       <div class="kpi"><div class="l">樣本外年化</div><div class="v">${pct(fo.cagr)}</div><div class="s">0050：${pct(bo.cagr)}</div></div>
@@ -488,6 +518,10 @@ function renderPerf(){
     <p class="note" style="margin:6px 0 0">樣本內＝${M.backtest_start} ~ ${M.oos_start}；樣本外＝${M.oos_start} 之後。參數未針對任何一段調整，樣本外是用來檢查績效是否只在特定年代成立。</p>
   </div>
   <div class="card">
+    <h2>降低存活者偏差的檢驗</h2>
+    <div id="pf-bias"></div>
+  </div>
+  <div class="card">
     <h2>敏感度：持股檔數改變，結果穩不穩？</h2>
     <div id="pf-sens"></div>
     <p class="note" style="margin:6px 0 0">若只有某一個檔數特別好，多半是巧合。年換手率＝每年買賣金額占資產比例的一半，越高越吃成本。</p>
@@ -495,6 +529,7 @@ function renderPerf(){
   segButtons($('#pf-range'),[[0,'全部'],[10,'10年'],[5,'5年'],[3,'3年']],perfState.years,k=>{perfState.years=+k; drawPerfCharts();});
   segButtons($('#pf-seg'),[['full','全期'],['is','樣本內'],['oos','樣本外']],perfState.seg,k=>{perfState.seg=k; drawPerfTable();});
   drawPerfCharts(); drawPerfTable();
+  $('#pf-bias').innerHTML=biasHtml();
   $('#pf-sens').innerHTML=table(['持股檔數','年化報酬','最大回撤','夏普','樣本外年化','年換手率'],ST.sensitivity.map(s=>`<tr style="${s.top_n===M.params.top_n?'font-weight:700':''}"><td>${s.top_n} 檔${s.top_n===M.params.top_n?'（採用）':''}</td><td>${pct(s.cagr)}</td><td>${pct(s.mdd,0)}</td><td>${num(s.sharpe)}</td><td>${pct(s.oos_cagr)}</td><td>${num(s.turnover,1)}x</td></tr>`));
 }
 function drawPerfCharts(){
@@ -503,18 +538,18 @@ function drawPerfCharts(){
   chart($('#pf-eq'),{dates:ST.dates,from:i0,log:true,yFmt:f,left:46,series:[
     {name:'選股策略（含成本）',color:'var(--blue)',values:ST.equity,width:1.9,tipFmt:tf},
     {name:'0050 買進持有',color:'var(--gray)',values:ST.benchmark,tipFmt:tf},
-    {name:'股票池等權重（未計成本）',color:'var(--amber)',values:ST.equal_weight,width:1.3,dash:'4 3',tipFmt:tf}]});
+    {name:'股票池等權重（未計成本）',color:'var(--amber)',values:ST.equal_weight,width:1.3,dash:'4 3',tipFmt:tf}].concat(ST.equal_weight_pit?[{name:`同條件等權重（前${M.params.pit_top||'-'}名）`,color:'var(--bot)',values:ST.equal_weight_pit,width:1.3,dash:'2 3',tipFmt:tf}]:[])});
   chart($('#pf-dd'),{dates:ST.dates,from:i0,height:170,maxZero:true,yFmt:v=>(v*100).toFixed(0)+'%',left:44,series:[
     {name:'選股策略',color:'var(--blue)',values:ST.dd_strategy,fill:true,tipFmt:v=>pct(v)},
     {name:'0050',color:'var(--gray)',values:ST.dd_benchmark,width:1.2,tipFmt:v=>pct(v)}]});
 }
 function drawPerfTable(){
-  const sg=perfState.seg, m=ST.metrics, a=m.strategy[sg], b=m.benchmark[sg], c=m.equal_weight[sg];
-  const row=(l,fn)=>`<tr><td>${l}</td><td>${fn(a)}</td><td>${fn(b)}</td><td>${fn(c)}</td></tr>`;
-  $('#pf-metrics').innerHTML=table(['','選股策略','0050','等權重股票池'],[
+  const sg=perfState.seg, m=ST.metrics, a=m.strategy[sg], b=m.benchmark[sg], c=m.equal_weight[sg], d=(m.equal_weight_pit||{})[sg]||{};
+  const row=(l,fn)=>`<tr><td>${l}</td><td>${fn(a)}</td><td>${fn(b)}</td><td>${fn(c)}</td><td>${fn(d)}</td></tr>`;
+  $('#pf-metrics').innerHTML=table(['','選股策略','0050','等權重股票池','同條件等權重'],[
     row('總報酬',x=>retCell(x.total,0)), row('年化報酬',x=>pct(x.cagr)), row('年化波動',x=>pct(x.vol)),
     row('夏普比率',x=>num(x.sharpe)), row('最大回撤',x=>pct(x.mdd,0)), row('Calmar（年化/回撤）',x=>num(x.calmar)),
-    `<tr><td>年換手率（策略）</td><td>${num(m.turnover_annual,1)}x</td><td>—</td><td>—</td></tr>`]);
+    `<tr><td>年換手率（策略）</td><td>${num(m.turnover_annual,1)}x</td><td>—</td><td>—</td><td>—</td></tr>`]);
 }
 
 function dqHtml(){
@@ -545,7 +580,7 @@ function renderMethod(){
   <li>成本：手續費 ${(p.commission*100).toFixed(4)}%（雙邊，未打折）、證交稅 ${(p.tax_stock*100).toFixed(1)}%（賣出）、滑價 ${(p.slippage*100).toFixed(1)}%（單邊）。大盤擇時以 0050 交易，證交稅 ${(p.tax_etf*100).toFixed(1)}%。</li></ul>
   <h2>已知限制（請務必閱讀）</h2>
   <ul>
-  <li><b>存活者偏差</b>：股票池是「現在」的大型股名單，等於事後挑出活到今天的強者，回測績效會偏高。真實操作無法事先知道誰會存活。</li>
+  <li><b>存活者偏差</b>：股票池是「現在」的大型股名單，等於事後挑出活到今天的強者，回測績效會偏高。本頁用三種方式降低、但無法消除它：每月只從「當時」成交值前 ${p.pit_top||"N"} 名選股、與同條件等權重比較、與隨機選股比較（見「回測績效」頁）。已下市公司沒有資料，仍無法納入。</li>
   <li><b>訊號樣本少</b>：15 年只有數十次事件，且常群聚在同一波行情，統計力有限。請以樣本外與基準對照判讀，不要只看漂亮的勝率。</li>
   <li><b>訊號可能沒有預測力</b>：高點（過熱）類指標在多頭市場常常是「強勢」的標記，之後可能繼續上漲。本頁會依樣本外驗證結果顯示結論，若沒有贏過隨機進場，請不要把它當買賣依據。</li>
   <li><b>資料窺探</b>：指標門檻採通用慣例值、未最佳化，但設計流程難免受「看過歷史」影響。唯一可靠的檢驗是未來的實盤／紙上交易。</li>
