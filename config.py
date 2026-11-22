@@ -55,3 +55,6 @@ TRADING_DAYS = 245           # 台股一年約 245 個交易日
 INDEX_TICKER = "^TWII"
 ETF_TICKER = "0050.TW"
 FINMIND_URL = "https://api.finmindtrade.com/api/v4/data"
+
+# 資料格式版本：改了輸出欄位就加 1。網頁會比對，不一致時提醒「請重新執行 Actions」
+SCHEMA_VERSION = 3

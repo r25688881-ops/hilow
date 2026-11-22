@@ -64,6 +64,7 @@ section.tab.on{display:block}
 table{border-collapse:collapse;width:100%;font-size:13.5px}
 th,td{padding:7px 9px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
 th{color:var(--sub);font-weight:600;font-size:12.5px}
+@media(max-width:600px){table{font-size:12.5px}th,td{padding:6px 3px}th{font-size:11.5px;white-space:normal;line-height:1.25;vertical-align:bottom}td:first-child,th:first-child{white-space:normal;text-align:left;min-width:3.2em}}
 th:first-child,td:first-child{text-align:left}
 td.l,th.l{text-align:left}
 tr.base td{color:var(--sub);font-style:italic}
@@ -139,6 +140,8 @@ const $ = (s, el=document) => el.querySelector(s);
 /* ---------- header ---------- */
 $('#meta').textContent = `資料截止 ${M.data_through} ・ 回測 ${M.backtest_start} ~ ${M.data_through}（樣本外自 ${M.oos_start}）・ 產生於 ${M.generated_at}`;
 const notes = [];
+const EXPECT_SCHEMA = 3;
+if(M.schema_version!==EXPECT_SCHEMA) notes.push('<b>⚠ 資料版本與頁面不一致：</b>目前看到的數字是舊版程式產生的（頁面需要資料版本 '+EXPECT_SCHEMA+'，實際為 '+(M.schema_version||'舊版')+'），部分區塊可能缺資料或與說明文字不符。請到 GitHub → Actions → update-backtest → Run workflow 重新執行一次，完成後重新整理頁面。');
 if(M.demo) notes.push('<b>⚠ 這是 DEMO 示範資料（電腦合成，不是真實行情）。</b>所有數字、訊號與選股清單都沒有意義，只用來展示介面。請在 GitHub 執行 <code>python run_all.py</code> 或啟用 Actions，換成真實資料。');
 if(!M.finmind_margin) notes.push('融資維持率資料未取得，大盤訊號只使用價量指標（5 項計分）。');
 if(!M.finmind_revenue) notes.push('月營收資料未取得，個股選股未使用營收因子。');

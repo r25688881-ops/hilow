@@ -267,6 +267,7 @@ def run(raw_dir: Path, out_dir: Path = OUT_DIR) -> Path:
             "data_through": end.strftime("%Y-%m-%d"),
             "backtest_start": bt_start.strftime("%Y-%m-%d"),
             "oos_start": split.strftime("%Y-%m-%d"),
+            "schema_version": C.SCHEMA_VERSION,
             "demo": bool(meta.get("demo", False)),
             "finmind_margin": bool(D["margin"] is not None),
             "finmind_revenue": bool(P.has_rev),
