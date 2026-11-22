@@ -141,6 +141,7 @@ if(M.demo) notes.push('<b>⚠ 這是 DEMO 示範資料（電腦合成，不是�
 if(!M.finmind_margin) notes.push('融資維持率資料未取得，大盤訊號只使用價量指標（5 項計分）。');
 if(!M.finmind_revenue) notes.push('月營收資料未取得，個股選股未使用營收因子。');
 (function(){ const D=M.data_quality; if(!D) return;
+  if(D.fix_count>0) notes.push(`<b>已自動修正價格斷層：</b>偵測到 ${D.fix_count} 筆疑似「股票分割／減資未還原」造成的價格斷層（單日變動超過 25%，而台股單日限制為 10%），已依分割比例接合。明細請見「方法與風險」頁底部。`);
   if(D.count>0) notes.push(`<b>資料品質提醒：</b>偵測到 ${D.count} 筆單日漲跌幅超過 15% 的資料點（台股單日漲跌幅限制為 10%），可能是股票分割或資料錯誤，會影響績效數字。明細請見「方法與風險」頁底部。`);
   const e=D.etf_mdd; if(e&&e.mdd<-0.5) notes.push(`<b>0050 數字疑似異常：</b>全期最大回撤 ${(e.mdd*100).toFixed(0)}%（${e.peak} 價格 ${e.peak_price.toFixed(2)} → ${e.trough} 價格 ${e.trough_price.toFixed(2)}），遠大於實際情況。0050 的「全期」對照請勿採信，請以樣本外為準。`);
 })();
@@ -520,9 +521,11 @@ function dqHtml(){
   const D=M.data_quality; if(!D) return '';
   const e=D.etf_mdd;
   const rows=(D.top||[]).slice(0,15).map(x=>`<tr><td class="l">${x.name}</td><td>${x.date}</td><td>${retCell(x.ret,1)}</td></tr>`);
+  const fx=(D.fixes||[]).slice(0,15).map(x=>`<tr><td class="l">${x.name}</td><td>${x.date}</td><td>${retCell(x.jump,0)}</td><td>×${x.ratio<1?'1/'+Math.round(1/x.ratio):x.ratio}</td></tr>`);
   return `<h2>資料品質檢查</h2><p>單日漲跌幅超過 15% 的資料點共 <b>${D.count}</b> 筆（台股單日漲跌幅限制為 10%，超過通常是股票分割、減資或資料錯誤）。</p>`+
     (e?`<p>基準（0050）最大回撤 <b>${pct(e.mdd,0)}</b>：高點 ${e.peak}（價格 ${num(e.peak_price)}）→ 低點 ${e.trough}（價格 ${num(e.trough_price)}）。</p>`:'')+
-    (rows.length?table(['標的','日期','單日變動'],rows):'');
+    (fx.length?`<h3>已自動接合的價格斷層（共 ${D.fix_count} 筆）</h3>`+table(['標的','日期','斷層變動','接合倍率'],fx):'')+
+    (rows.length?`<h3>修正後仍超過 15% 的資料點</h3>`+table(['標的','日期','單日變動'],rows):'');
 }
 /* ---------- 方法與風險 ---------- */
 function renderMethod(){

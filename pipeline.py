@@ -78,7 +78,33 @@ def _series_pack(s: pd.Series, nd: int = 4) -> list:
     return [None if v != v else round(float(v), nd) for v in s.values]
 
 
-def data_quality(D: dict, adj: pd.DataFrame, bench_raw: pd.Series, bench: pd.Series) -> dict:
+SPLIT_RATIOS = [1 / 10, 1 / 8, 1 / 6, 1 / 5, 1 / 4, 1 / 3, 1 / 2, 2, 3, 4, 5, 10]
+
+
+def repair_splits(s: pd.Series, name: str, fixes: list) -> pd.Series:
+    """修復「分割／減資未還原」造成的價格斷層。
+
+    台股單日漲跌幅限制 10%，所以單日變動超過 25% 不可能是真實報酬。
+    若變動倍數接近常見的分割比例（1/4、1/2、2 倍…，誤差 20% 內），就把斷層之前的價格乘上該比例接起來，
+    斷層日剩下的小幅差異視為真實報酬。每一筆修正都會記錄並顯示在網頁上。
+    """
+    x = s.dropna()
+    if len(x) < 3:
+        return s
+    r = x.pct_change()
+    out = s.astype(float).copy()
+    for d, v in r[r.abs() > 0.25].items():
+        q = 1 + v
+        if q <= 0:
+            continue
+        sr = min(SPLIT_RATIOS, key=lambda c: abs(math.log(q / c)))
+        if abs(math.log(q / sr)) < math.log(1.2):
+            out.loc[out.index < d] *= sr
+            fixes.append({"name": name, "date": d.strftime("%Y-%m-%d"), "ratio": float(sr), "jump": float(v)})
+    return out
+
+
+def data_quality(D: dict, adj: pd.DataFrame, bench_raw: pd.Series, bench: pd.Series, fixes: list) -> dict:
     """掃描單日漲跌幅 > 15% 的資料點（台股漲跌幅限制 10%，超過多半是分割、減資或資料錯誤），並記錄基準最大回撤的位置。"""
     items = []
 
@@ -105,12 +131,20 @@ def data_quality(D: dict, adj: pd.DataFrame, bench_raw: pd.Series, bench: pd.Ser
     for it in items[:15]:
         log(f"  {it['name']} {it['date']} {it['ret']:+.1%}")
     log(f"基準最大回撤 {etf_mdd['mdd']:.1%}：{etf_mdd['peak']}（{etf_mdd['peak_price']:.2f}）→ {etf_mdd['trough']}（{etf_mdd['trough_price']:.2f}）")
-    return {"count": len(items), "top": items[:25], "etf_mdd": etf_mdd}
+    log(f"自動修正價格斷層 {len(fixes)} 筆")
+    for f in fixes[:15]:
+        log(f"  {f['name']} {f['date']} 單日 {f['jump']:+.1%} → 以比例 {f['ratio']:.4g} 接合")
+    return {"count": len(items), "top": items[:25], "etf_mdd": etf_mdd,
+            "fix_count": len(fixes), "fixes": sorted(fixes, key=lambda f: -abs(f["jump"]))[:30]}
 
 
 def run(raw_dir: Path, out_dir: Path = OUT_DIR) -> Path:
     D = load_raw(raw_dir)
     meta = D["meta"]
+    fixes: list = []
+    if D["etf"] is not None:
+        D["etf"] = repair_splits(D["etf"], "0050", fixes)
+    D["adj"] = D["adj"].apply(lambda col: repair_splits(col, f"{NAMES.get(col.name, col.name)}({col.name})", fixes))
     idx = D["index"]
     end = idx.index[-1]
     bt_start = end - pd.DateOffset(years=C.BACKTEST_YEARS)
@@ -166,7 +200,7 @@ def run(raw_dir: Path, out_dir: Path = OUT_DIR) -> Path:
     dates_common = eq.index.intersection(bench.index).intersection(ew.index)
     eq, bench, ew = eq.loc[dates_common], bench.loc[dates_common], ew.loc[dates_common]
     eq, bench, ew = eq / eq.iloc[0], bench / bench.iloc[0], ew / ew.iloc[0]
-    dq = data_quality(D, adj, bench_src.reindex(common).ffill(), bench)
+    dq = data_quality(D, adj, bench_src.reindex(common).ffill(), bench, fixes)
 
     def seg_metrics(s):
         return {"full": M.metrics(s), "is": M.metrics(s.loc[:split]), "oos": M.metrics(s.loc[split:])}
