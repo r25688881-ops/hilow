@@ -108,8 +108,9 @@ def data_quality(D: dict, adj: pd.DataFrame, bench_raw: pd.Series, bench: pd.Ser
     """掃描單日漲跌幅 > 15% 的資料點（台股漲跌幅限制 10%，超過多半是分割、減資或資料錯誤），並記錄基準最大回撤的位置。"""
     items = []
 
-    def scan(name: str, s: pd.Series) -> None:
-        r = s.dropna().pct_change().dropna()
+    def scan(name: str, s: pd.Series, skip: int = 0) -> None:
+        # skip：個股前約一年的資料不檢查（可能是興櫃階段，沒有 10% 漲跌幅限制；選股也要滿 12 個月歷史才會用到）
+        r = s.dropna().pct_change().dropna().iloc[skip:]
         for d, v in r[r.abs() > 0.15].items():
             items.append({"name": name, "date": d.strftime("%Y-%m-%d"), "ret": float(v)})
 
@@ -117,7 +118,7 @@ def data_quality(D: dict, adj: pd.DataFrame, bench_raw: pd.Series, bench: pd.Ser
     if D["etf"] is not None:
         scan("0050", D["etf"])
     for c in adj.columns:
-        scan(f"{NAMES.get(c, c)}({c})", adj[c])
+        scan(f"{NAMES.get(c, c)}({c})", adj[c], skip=250)
     items.sort(key=lambda x: -abs(x["ret"]))
 
     dd = bench / bench.cummax() - 1

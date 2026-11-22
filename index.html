@@ -522,7 +522,7 @@ function dqHtml(){
   const e=D.etf_mdd;
   const rows=(D.top||[]).slice(0,15).map(x=>`<tr><td class="l">${x.name}</td><td>${x.date}</td><td>${retCell(x.ret,1)}</td></tr>`);
   const fx=(D.fixes||[]).slice(0,15).map(x=>`<tr><td class="l">${x.name}</td><td>${x.date}</td><td>${retCell(x.jump,0)}</td><td>×${x.ratio<1?'1/'+Math.round(1/x.ratio):x.ratio}</td></tr>`);
-  return `<h2>資料品質檢查</h2><p>單日漲跌幅超過 15% 的資料點共 <b>${D.count}</b> 筆（台股單日漲跌幅限制為 10%，超過通常是股票分割、減資或資料錯誤）。</p>`+
+  return `<h2>資料品質檢查</h2><p>單日漲跌幅超過 15% 的資料點共 <b>${D.count}</b> 筆（台股單日漲跌幅限制為 10%，超過通常是股票分割、減資或資料錯誤；個股上市初期前約一年的資料不檢查，因為興櫃階段沒有漲跌幅限制）。</p>`+
     (e?`<p>基準（0050）最大回撤 <b>${pct(e.mdd,0)}</b>：高點 ${e.peak}（價格 ${num(e.peak_price)}）→ 低點 ${e.trough}（價格 ${num(e.trough_price)}）。</p>`:'')+
     (fx.length?`<h3>已自動接合的價格斷層（共 ${D.fix_count} 筆）</h3>`+table(['標的','日期','斷層變動','接合倍率'],fx):'')+
     (rows.length?`<h3>修正後仍超過 15% 的資料點</h3>`+table(['標的','日期','單日變動'],rows):'');
