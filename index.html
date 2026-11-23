@@ -107,6 +107,7 @@ footer{color:var(--sub);font-size:12.5px;margin-top:20px}
     <button data-t="market">大盤訊號</button>
     <button data-t="stocks">十股建議</button>
     <button data-t="perf">回測績效</button>
+    <button data-t="etf">ETF比較</button>
     <button data-t="guide">使用建議</button>
     <button data-t="method">方法與風險</button>
   </nav>
@@ -114,6 +115,7 @@ footer{color:var(--sub);font-size:12.5px;margin-top:20px}
   <section class="tab" id="tab-market"></section>
   <section class="tab" id="tab-stocks"></section>
   <section class="tab" id="tab-perf"></section>
+  <section class="tab" id="tab-etf"></section>
   <section class="tab" id="tab-guide"></section>
   <section class="tab" id="tab-method"></section>
   <footer>歷史回測不代表未來績效；本頁內容僅為量化研究與教學用途，不構成任何投資建議。投資有風險，請自行評估並承擔結果。</footer>
@@ -140,7 +142,7 @@ const $ = (s, el=document) => el.querySelector(s);
 /* ---------- header ---------- */
 $('#meta').textContent = `資料截止 ${M.data_through} ・ 回測 ${M.backtest_start} ~ ${M.data_through}（樣本外自 ${M.oos_start}）・ 產生於 ${M.generated_at}`;
 const notes = [];
-const EXPECT_SCHEMA = 4;
+const EXPECT_SCHEMA = 5;
 if(M.schema_version!==EXPECT_SCHEMA) notes.push('<b>⚠ 資料版本與頁面不一致：</b>目前看到的數字是舊版程式產生的（頁面需要資料版本 '+EXPECT_SCHEMA+'，實際為 '+(M.schema_version||'舊版')+'），部分區塊可能缺資料或與說明文字不符。請到 GitHub → Actions → update-backtest → Run workflow 重新執行一次，完成後重新整理頁面。');
 if(M.demo) notes.push('<b>⚠ 這是 DEMO 示範資料（電腦合成，不是真實行情）。</b>所有數字、訊號與選股清單都沒有意義，只用來展示介面。請在 GitHub 執行 <code>python run_all.py</code> 或啟用 Actions，換成真實資料。');
 if(!M.finmind_margin) notes.push('融資維持率資料未取得，大盤訊號只使用價量指標（5 項計分）。');
@@ -153,7 +155,7 @@ if(!M.finmind_revenue) notes.push('月營收資料未取得，個股選股未使
 $('#banner').innerHTML = notes.map(t=>`<div class="demo">${t}</div>`).join('');
 
 /* ---------- tabs ---------- */
-const tabs = ['overview','market','stocks','perf','guide','method'];
+const tabs = ['overview','market','stocks','perf','etf','guide','method'];
 const rendered = {};
 function show(t){
   if(!tabs.includes(t)) t='overview';
@@ -587,6 +589,78 @@ function dqHtml(){
     (fx.length?`<h3>已自動接合的價格斷層（共 ${D.fix_count} 筆）</h3>`+table(['標的','日期','斷層變動','接合倍率'],fx):'')+
     (rows.length?`<h3>修正後仍超過 15% 的資料點</h3>`+table(['標的','日期','單日變動'],rows):'');
 }
+/* ---------- ETF 比較 ---------- */
+function renderEtf(){
+  const el=$('#tab-etf'), E=R.etf;
+  if(!E||!E.rows||!E.rows.length){
+    el.innerHTML='<div class="card"><h2>ETF 比較</h2><p class="note">這個頁面需要等 Actions 重新執行（且抓到 ETF 資料）後才會有內容。若已重跑仍是空的，代表 Yahoo 沒有回傳 ETF 資料，請看 Actions 日誌的 [fetch] ETF 訊息。</p></div>'; return; }
+  const rows=E.rows, C0=E.common, kindName=k=>k==='active'?'主動':'被動';
+  const tag=r=>`<span class="tag" style="${r.kind==='active'?'background:rgba(139,92,246,.18);color:#8b5cf6':''}">${kindName(r.kind)}</span>`;
+  const nm=r=>`<b>${r.code}</b><br>${r.name.replace(/^主動/,'')}`;
+  const W1='style="min-width:104px"';
+  const p0=(v,d=1)=>nz(v)?pct(v,d):'—';
+  const rc=(v,d=1)=>nz(v)?retCell(v,d):'—';
+  const passive=rows.filter(r=>r.kind==='passive'), active=rows.filter(r=>r.kind==='active');
+
+  /* 1. 結論 */
+  let head='';
+  if(C0&&nz(C0.bench_ret)&&C0.n_active>0){
+    head=`<p style="margin:2px 0 8px"><span class="verdict v-mid" style="margin-left:0">共同期間（${C0.start} ~ ${C0.end}，約 ${C0.months} 個月）：${C0.n_active} 檔主動型中有 <b>${C0.n_beat}</b> 檔勝過 0050，超額報酬中位數 ${rc(C0.median_excess)}</span></p>
+    <p class="note" style="margin:0 0 6px">0050 同期累積報酬 ${rc(C0.bench_ret)}。期間不到 1 年、又是單一行情，無法判斷經理人的能力：贏或輸都可能只是運氣。請把這頁當作「認識這些 ETF 的長相」，不是買賣訊號。</p>`;
+  } else head='<p class="note">資料不足以做共同期間比較。</p>';
+
+  /* 2. 共同期間排行（橫條）*/
+  let bars='';
+  const cr=rows.filter(r=>r.common&&nz(r.common.ret)).sort((a,b)=>b.common.ret-a.common.ret);
+  if(cr.length){
+    const mx=Math.max(...cr.map(r=>Math.abs(r.common.ret)),0.01);
+    bars=cr.map(r=>{ const w=Math.max(2,Math.abs(r.common.ret)/mx*100), col=r.code==='0050'?'var(--amber)':(r.kind==='active'?'#8b5cf6':'var(--bot)');
+      return `<div style="display:flex;align-items:center;gap:6px;margin:3px 0;font-size:12.5px"><div style="width:42%;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${tag(r)} ${r.code} ${r.name}</div><div style="flex:1;background:var(--chip);border-radius:4px;height:14px"><div style="width:${w}%;background:${col};height:14px;border-radius:4px;opacity:${r.common.ret<0?.5:1}"></div></div><div style="width:52px;text-align:right">${rc(r.common.ret)}</div></div>`; }).join('');
+  }
+
+  /* 3. 被動型 */
+  const tp=table(['ETF','年化','近5年','波動','最大回撤','殖利率','相關'],passive.map(r=>
+    `<tr><td class="l" ${W1}>${nm(r)}<br><span class="note">${r.style}</span></td><td>${p0(r.cagr)}</td><td>${p0(r.cagr5)}</td><td>${p0(r.vol)}</td><td>${p0(r.mdd,0)}</td><td>${p0(r.yld)}${r.yld_partial?'*':''}</td><td>${nz(r.corr)?num(r.corr,2):'—'}</td></tr>`));
+
+  /* 4. 主動型 */
+  const ta=table(['ETF','累積報酬','同期0050','超額','最大回撤','殖利率'],active.map(r=>{
+    const b=(nz(r.cum)&&nz(r.ex))?r.cum-r.ex:null;
+    return `<tr style="${r.months<6?'opacity:.6':''}"><td class="l" ${W1}>${nm(r)}<br><span class="note">${r.style}・${r.first}<br>上市 ${num(r.months,1)} 個月</span></td><td>${rc(r.cum)}</td><td>${rc(b)}</td><td>${rc(r.ex)}</td><td>${p0(r.mdd,0)}</td><td>${p0(r.yld)}${r.yld_partial?'*':''}</td></tr>`; }));
+
+  const failed=(E.failed&&E.failed.length)?`<p class="note" style="margin:6px 0 0"><b>抓不到資料的 ETF：</b>${E.failed.join('、')}（Yahoo 沒有回傳，可能代碼格式或尚未收錄）。</p>`:'';
+  const fixes=(E.fixes&&E.fixes.length)?`<p class="note" style="margin:6px 0 0"><b>已修正價格斷層：</b>${E.fixes.map(f=>`${f.name} ${f.date}（×${f.ratio}）`).join('、')}。</p>`:'';
+
+  el.innerHTML=`
+  <div class="card">
+    <h2>主動型 vs 被動型：共同期間比較</h2>
+    ${head}
+    ${bars?`<h3>同一起跑點的累積報酬（${C0.start} 起）</h3>${bars}<p class="note" style="margin:6px 0 0">只納入 ${E.cutoff} 前上市的 ETF，並從其中最晚上市者的第一天起算，這樣才是公平比較。<span style="color:#8b5cf6">紫色</span>＝主動型、<span style="color:var(--bot)">藍色</span>＝被動型、<span style="color:var(--amber)">橘色</span>＝0050。</p>`:''}
+  </div>
+  <div class="card">
+    <h2>被動型 ETF（歷史較長）</h2>
+    ${tp}
+    <p class="note" style="margin:6px 0 0">年化／最大回撤皆用含配息的還原價計算，期間為各檔自上市（或資料起點）至今，所以不同檔的期間不同，請對照「近5年」。「相關」＝與 0050 日報酬的相關係數。殖利率＝近 12 個月配息 ÷ 最新價；*＝上市未滿一年，只含已配的部分。</p>
+  </div>
+  <div class="card">
+    <h2>主動型 ETF（${active.length} 檔，依上市日排序）</h2>
+    ${ta}
+    <p class="note" style="margin:6px 0 0">「同期0050」＝同一段期間 0050 的累積報酬；「超額」＝該 ETF 累積報酬減去同期 0050。上市未滿 6 個月的（淡色）不要拿來下結論。因為不同檔上市日不同，這張表的數字<b>不能彼此直接比較</b>，請看上方「共同期間」。</p>
+    ${E.new_active&&E.new_active.length?`<p class="note" style="margin:6px 0 0">${E.new_active.length} 檔在 ${E.cutoff} 後才上市，因此不在共同期間比較內。</p>`:''}
+    ${failed}${fixes}
+  </div>
+  <div class="card prose">
+    <h2>怎麼讀這些數字</h2>
+    <ul>
+      <li><b>歷史長度最重要。</b>主動型最早也只有約一年半的歷史，而且大部分時間在多頭，績效好不代表經理人有能力，市場下跌時才看得出差別。</li>
+      <li><b>看波動與最大回撤，不只看報酬。</b>報酬高但回撤深的 ETF，在下跌時你可能撐不住。</li>
+      <li><b>高股息 ETF 的殖利率不等於報酬。</b>配息會使價格下降（除息），請看含配息的還原報酬。</li>
+      <li><b>主動型與 0050 的相關性高</b>，代表持股大致相近；若只是追蹤 0050 卻收較高的費用，要想清楚付的錢換到什麼。</li>
+      <li><b>本頁沒有的資料：</b>費用率、規模、淨值與溢折價、持股明細。這些請到各投信官網或證交所 ETF 專區確認，尤其是費用率與溢價。</li>
+      <li><b>只含目前仍在交易的 ETF。</b>已下市或清算的主動型／被動型不在裡面，所以整體表現會偏樂觀（存活者偏差）。</li>
+    </ul>
+    <p class="note">本頁只做比較與描述，沒有買賣時機訊號。回測顯示大盤高低點訊號沒有預測力，套用在 ETF 上也沒有理由更好。若要分批進場，可參考「大盤訊號」頁的分批進場參考表。分類（成長／高息／科技／核心50）為我依名稱歸類，不是官方分類。僅供研究與教學，不是投資建議。</p>
+  </div>`;
+}
 /* ---------- 使用建議 ---------- */
 function cfVerdict(kind){
   const CF=MK.stats.confirm; if(!CF) return null;
@@ -675,7 +749,7 @@ function renderMethod(){
   </div>`;
 }
 
-const renderers={overview:renderOverview,market:renderMarket,stocks:renderStocks,perf:renderPerf,guide:renderGuide,method:renderMethod};
+const renderers={overview:renderOverview,market:renderMarket,stocks:renderStocks,perf:renderPerf,etf:renderEtf,guide:renderGuide,method:renderMethod};
 const redraw={market:()=>{drawMarketCharts();drawTiming();},perf:drawPerfCharts};
 let rt; window.addEventListener('resize',()=>{ clearTimeout(rt); rt=setTimeout(()=>{ const t=location.hash.slice(1)||'overview'; if(redraw[t]&&rendered[t]) redraw[t](); },150); });
 show(location.hash.slice(1)||'overview');

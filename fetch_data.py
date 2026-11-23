@@ -20,6 +20,7 @@ import pandas as pd
 
 import config as C
 from universe import UNIVERSE, yahoo_symbol
+from etf_universe import ETFS, etf_symbol
 
 RAW_DIR = Path(__file__).resolve().parent / "data" / "raw"
 
@@ -91,6 +92,26 @@ def fetch_yahoo(start: str) -> dict:
         pd.DataFrame(d).sort_index().to_csv(RAW_DIR / f"{fname}.csv", index_label="date")
     log(f"個股：成功 {status['stocks_ok']} 檔，失敗 {len(status['stocks_failed'])} 檔")
     return status
+
+
+def fetch_etfs(start: str) -> dict:
+    """ETF 比較用資料（選用）：抓不到的會記錄在 failed，不影響其他功能。"""
+    adj, raw, div, failed = {}, {}, {}, []
+    for e in ETFS:
+        h = _history(etf_symbol(e["code"]), start)
+        if h is None or len(h) < C.ETF_MIN_DAYS:
+            failed.append(e["code"])
+            log(f"  ETF {e['code']} {e['name']}：抓不到或資料太少")
+        else:
+            adj[e["code"]] = h["Adj Close"]
+            raw[e["code"]] = h["Close"]
+            div[e["code"]] = h["Dividends"] if "Dividends" in h.columns else pd.Series(0.0, index=h.index)
+        time.sleep(0.4)
+    if adj:
+        for fname, d in [("etf_prices_adj", adj), ("etf_prices_raw", raw), ("etf_dividends", div)]:
+            pd.DataFrame(d).sort_index().to_csv(RAW_DIR / f"{fname}.csv", index_label="date")
+    log(f"ETF：成功 {len(adj)} 檔，失敗 {len(failed)} 檔")
+    return {"ok": len(adj), "failed": failed}
 
 
 # ---------------- FinMind（選用） ----------------
@@ -165,6 +186,11 @@ def main() -> None:
     log(f"抓取起日：{start}")
 
     ystatus = fetch_yahoo(start)
+    try:
+        etf_status = fetch_etfs(start)
+    except Exception as e:  # noqa: BLE001
+        log(f"ETF 資料抓取失敗（不影響其他功能）：{e}")
+        etf_status = {"ok": 0, "failed": [x["code"] for x in ETFS]}
     # FinMind 營收需要多一點暖機（算年增率要前一年資料）
     fm_start = (start_dt - timedelta(days=400)).isoformat()
     margin_ok = fetch_margin(fm_start)
@@ -174,6 +200,7 @@ def main() -> None:
     meta = {
         "fetched_at": datetime.now().isoformat(timespec="seconds"),
         "yahoo": ystatus,
+        "etf_universe": etf_status,
         "finmind_margin": margin_ok,
         "finmind_revenue": rev_ok,
         "demo": False,

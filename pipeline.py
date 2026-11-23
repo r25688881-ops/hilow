@@ -13,6 +13,7 @@ import pandas as pd
 import config as C
 import signals as S
 import stock_model as M
+import etf_analysis as EA
 from universe import NAMES
 
 ROOT = Path(__file__).resolve().parent
@@ -42,6 +43,7 @@ def load_raw(raw_dir: Path) -> dict:
     rev = None
     if (raw_dir / "revenue.csv").exists():
         rev = pd.read_csv(raw_dir / "revenue.csv", dtype={"stock_id": str})
+    etf_files = {k: _read_wide(raw_dir / f"etf_{k}.csv") if (raw_dir / f"etf_{k}.csv").exists() else None for k in ("prices_adj", "prices_raw", "dividends")}
     meta = json.loads((raw_dir / "meta.json").read_text(encoding="utf-8")) if (raw_dir / "meta.json").exists() else {}
     return {
         "index": idx,
@@ -52,6 +54,7 @@ def load_raw(raw_dir: Path) -> dict:
         "raw": _read_wide(raw_dir / "prices_raw.csv"),
         "vol": _read_wide(raw_dir / "volume.csv"),
         "div": _read_wide(raw_dir / "dividends.csv"),
+        "etf_files": etf_files,
         "meta": meta,
     }
 
@@ -262,6 +265,22 @@ def run(raw_dir: Path, out_dir: Path = OUT_DIR) -> Path:
         "revenue_factor": P.has_rev,
     }
 
+    etf_out = None
+    try:
+        ef = D.get("etf_files") or {}
+        if ef.get("prices_adj") is not None and ef.get("prices_raw") is not None:
+            etf_fixes: list = []
+            eadj = ef["prices_adj"].copy()
+            for c in eadj.columns:
+                eadj[c] = repair_splits(eadj[c], c, etf_fixes)
+            ediv = ef["dividends"] if ef.get("dividends") is not None else pd.DataFrame(index=eadj.index)
+            failed = (meta.get("etf_universe") or {}).get("failed", [])
+            etf_out = EA.analyze(eadj, ef["prices_raw"], ediv, failed, etf_fixes)
+            log(f"ETF 比較：{len(etf_out['rows'])} 檔，抓取失敗 {len(failed)} 檔，價格斷層修正 {len(etf_fixes)} 筆")
+    except Exception as e:  # noqa: BLE001
+        log(f"ETF 分析失敗（不影響其他功能）：{e}")
+        etf_out = None
+
     result = {
         "meta": {
             "generated_at": datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y-%m-%d %H:%M"),
@@ -284,6 +303,7 @@ def run(raw_dir: Path, out_dir: Path = OUT_DIR) -> Path:
         },
         "market": {"state": state, "chart": index_chart, "stats": stats, "timing": timing_out, "ladder": ladder},
         "stocks": stock_out,
+        "etf": etf_out,
     }
     result = clean(result)
 

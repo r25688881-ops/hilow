@@ -13,6 +13,7 @@ import pandas as pd
 
 import config as C
 from universe import UNIVERSE
+from etf_universe import ETFS
 
 DEMO_DIR = Path(__file__).resolve().parent / "data" / "demo"
 
@@ -111,6 +112,25 @@ def generate(out_dir: Path = DEMO_DIR, seed: int = 7) -> Path:
     pd.DataFrame(rev_rows, columns=["stock_id", "revenue_year", "revenue_month", "revenue"]).to_csv(
         out_dir / "revenue.csv", index=False
     )
+    # ---- ETF（示範：以大盤為基礎加上追蹤誤差；主動型從上市日起算）----
+    demo_first = {"006208": "2012-07-20", "00878": "2020-07-20", "00919": "2022-10-20", "00929": "2023-06-20",
+                  "00940": "2024-04-20", "00713": "2017-09-20"}
+    e_adj, e_raw, e_div = {}, {}, {}
+    mkt = pd.Series(rets, index=days)
+    for e in ETFS:
+        first = pd.Timestamp(e.get("listed") or demo_first.get(e["code"], days[0]))
+        beta = rng.uniform(0.85, 1.1)
+        r = beta * mkt + rng.normal(0.00005, 0.003 if e["kind"] == "passive" else 0.006, n)
+        px = pd.Series(30 * np.exp(np.cumsum(r)), index=days)
+        px[px.index < first] = np.nan
+        yl = rng.uniform(0.02, 0.07) if e["style"] in ("高股息", "高息低波", "高息") else rng.uniform(0.0, 0.02)
+        dvs = pd.Series(0.0, index=days)
+        for d0 in days[(days.month.isin([1, 4, 7, 10])) & (days.day <= 3)].to_series().groupby([days[(days.month.isin([1, 4, 7, 10])) & (days.day <= 3)].year, days[(days.month.isin([1, 4, 7, 10])) & (days.day <= 3)].month]).min().values:
+            if d0 in px.index and not np.isnan(px.loc[d0]):
+                dvs.loc[d0] = px.loc[d0] * yl / 4
+        e_adj[e["code"]], e_raw[e["code"]], e_div[e["code"]] = px, px, dvs.where(px.notna())
+    for fname, d in [("etf_prices_adj", e_adj), ("etf_prices_raw", e_raw), ("etf_dividends", e_div)]:
+        pd.DataFrame(d).to_csv(out_dir / f"{fname}.csv", index_label="date")
     (out_dir / "meta.json").write_text(
         json.dumps(
             {
@@ -119,6 +139,7 @@ def generate(out_dir: Path = DEMO_DIR, seed: int = 7) -> Path:
                 "finmind_margin": True,
                 "finmind_revenue": True,
                 "yahoo": {"stocks_ok": len(UNIVERSE), "stocks_failed": []},
+                "etf_universe": {"ok": len(ETFS), "failed": []},
             },
             ensure_ascii=False,
             indent=2,
