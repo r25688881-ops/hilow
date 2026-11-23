@@ -304,3 +304,41 @@ def confirm_statistics(ind: pd.DataFrame, flags: pd.DataFrame, bt_start: pd.Time
             out[kind][seg] = {str(h): _agg([forward_returns(close, i, [h])[h] for i in sel], bearish) for h in C.HORIZONS}
             out[kind][seg]["count"] = len(sel)
     return out
+
+
+# ------------------------- 分批進場參考：回落到各門檻後發生什麼事 -------------------------
+
+def ladder_statistics(ind: pd.DataFrame, bt_start: pd.Timestamp) -> dict:
+    """較一年高點回落到各門檻（首次跌破）後：之後還會再跌多少、60/120/250 日報酬。
+    每一輪行情（回落收斂到 LADDER_RESET 內才重置）只算一次。這不是預測底部，而是呈現「跌到這裡之後通常發生什麼」。"""
+    close = ind["close"].values
+    dd = ind["dd252"].values
+    dates = ind.index
+    hs = C.LADDER_HORIZONS
+    start_i = int(np.searchsorted(dates, bt_start))
+    base = {h: [forward_returns(close, i, [h])[h] for i in range(start_i, len(close))] for h in hs}
+    out = {"horizons": hs, "levels": [], "baseline": {str(h): _agg(base[h], False) for h in hs}}
+    for L in C.LADDER_LEVELS:
+        ev, armed = [], True
+        for i in range(start_i, len(close)):
+            if dd[i] != dd[i]:
+                continue
+            if armed and dd[i] <= -L:
+                ev.append(i); armed = False
+            elif dd[i] > -C.LADDER_RESET:
+                armed = True
+        further = []
+        for i in ev:
+            e = i + 1
+            if e >= len(close):
+                continue
+            seg = close[e: e + 251]
+            further.append(float(seg.min() / close[e] - 1))
+        row = {"level": L, "n": len(ev), "last": dates[ev[-1]].strftime("%Y-%m-%d") if ev else None,
+               "further_median": float(np.median(further)) if further else None,
+               "further_worst": float(min(further)) if further else None,
+               "fwd": {str(h): _agg([forward_returns(close, i, [h])[h] for i in ev], False) for h in hs}}
+        out["levels"].append(row)
+    cur = dd[-1]
+    out["current_dd"] = None if cur != cur else float(cur)
+    return out

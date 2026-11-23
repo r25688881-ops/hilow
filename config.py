@@ -57,4 +57,7 @@ ETF_TICKER = "0050.TW"
 FINMIND_URL = "https://api.finmindtrade.com/api/v4/data"
 
 # 資料格式版本：改了輸出欄位就加 1。網頁會比對，不一致時提醒「請重新執行 Actions」
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
+LADDER_LEVELS = [0.10, 0.15, 0.20, 0.25, 0.30]   # 分批進場參考：較一年高點回落幅度
+LADDER_HORIZONS = [60, 120, 250]
+LADDER_RESET = 0.05                                 # 回落收斂到 5% 內才算下一輪

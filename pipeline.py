@@ -163,6 +163,7 @@ def run(raw_dir: Path, out_dir: Path = OUT_DIR) -> Path:
     etf = D["etf"] if D["etf"] is not None else idx["close"]
     timing = S.timing_strategy(ind, flags, etf, bt_start)
     state = S.current_state(ind, flags, brules, trules)
+    ladder = S.ladder_statistics(ind, bt_start)
     log(f"目前大盤：底部分數 {state['bottom_score']}/{state['bottom_max']}，高點分數 {state['top_score']}/{state['top_max']}")
 
     win = ind.index >= bt_start
@@ -281,7 +282,7 @@ def run(raw_dir: Path, out_dir: Path = OUT_DIR) -> Path:
                 "backtest_years": C.BACKTEST_YEARS, "pit_top": C.PIT_TOP, "random_sims": C.RANDOM_SIMS, "confirm_lookback": C.CONFIRM_LOOKBACK,
             },
         },
-        "market": {"state": state, "chart": index_chart, "stats": stats, "timing": timing_out},
+        "market": {"state": state, "chart": index_chart, "stats": stats, "timing": timing_out, "ladder": ladder},
         "stocks": stock_out,
     }
     result = clean(result)

@@ -64,7 +64,7 @@ section.tab.on{display:block}
 table{border-collapse:collapse;width:100%;font-size:13.5px}
 th,td{padding:7px 9px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
 th{color:var(--sub);font-weight:600;font-size:12.5px}
-@media(max-width:600px){table{font-size:12.5px}th,td{padding:6px 3px}th{font-size:11.5px;white-space:normal;line-height:1.25;vertical-align:bottom}td:first-child,th:first-child{white-space:normal;text-align:left;min-width:3.2em}}
+@media(max-width:600px){table{font-size:12px}th,td{padding:6px 2px}th{font-size:11.5px;white-space:normal;line-height:1.25;vertical-align:bottom}td:first-child,th:first-child{white-space:normal;text-align:left;min-width:2.6em}}
 th:first-child,td:first-child{text-align:left}
 td.l,th.l{text-align:left}
 tr.base td{color:var(--sub);font-style:italic}
@@ -140,7 +140,7 @@ const $ = (s, el=document) => el.querySelector(s);
 /* ---------- header ---------- */
 $('#meta').textContent = `資料截止 ${M.data_through} ・ 回測 ${M.backtest_start} ~ ${M.data_through}（樣本外自 ${M.oos_start}）・ 產生於 ${M.generated_at}`;
 const notes = [];
-const EXPECT_SCHEMA = 3;
+const EXPECT_SCHEMA = 4;
 if(M.schema_version!==EXPECT_SCHEMA) notes.push('<b>⚠ 資料版本與頁面不一致：</b>目前看到的數字是舊版程式產生的（頁面需要資料版本 '+EXPECT_SCHEMA+'，實際為 '+(M.schema_version||'舊版')+'），部分區塊可能缺資料或與說明文字不符。請到 GitHub → Actions → update-backtest → Run workflow 重新執行一次，完成後重新整理頁面。');
 if(M.demo) notes.push('<b>⚠ 這是 DEMO 示範資料（電腦合成，不是真實行情）。</b>所有數字、訊號與選股清單都沒有意義，只用來展示介面。請在 GitHub 執行 <code>python run_all.py</code> 或啟用 Actions，換成真實資料。');
 if(!M.finmind_margin) notes.push('融資維持率資料未取得，大盤訊號只使用價量指標（5 項計分）。');
@@ -396,6 +396,10 @@ function renderMarket(){
     <div id="mk-stats"></div>
   </div>
   <div class="card">
+    <h2>分批進場參考表：跌到這裡之後，通常發生什麼？</h2>
+    <div id="mk-ladder"></div>
+  </div>
+  <div class="card">
     <h2>確認型訊號：先過熱／超賣，再等價格轉向</h2>
     <div class="note" style="margin-bottom:6px">規則在看結果前就已固定，只測一次、沒有調參。高點確認＝近 ${M.params.confirm_lookback||20} 日內出現過高點警示，且收盤由上往下跌破 20 日線；底部確認＝近 ${M.params.confirm_lookback||20} 日內出現過底部警示，且收盤由下往上站上 20 日線。上方的「全期／樣本內／樣本外」切換同樣適用。</div>
     <div id="mk-confirm"></div>
@@ -415,7 +419,7 @@ function renderMarket(){
   segButtons($('#mk-thr'),MK.stats.bottom?Object.keys(MK.stats.bottom).map(k=>[k,'門檻 ≥'+k+' 項']):[],mkState.thr,k=>{mkState.thr=k; drawStats();});
   segButtons($('#mk-seg'),[['all','全期'],['is','樣本內'],['oos','樣本外（最近'+M.params.oos_years+'年）']],mkState.seg,k=>{mkState.seg=k; drawStats(); drawConfirm();});
   segButtons($('#mk-evtype'),[['all','全部'],['bottom','只看底部'],['top','只看高點']],mkState.evType,k=>{mkState.evType=k; drawEvents();});
-  drawMarketCharts(); drawStats(); drawConfirm(); drawEvents(); drawTiming();
+  drawMarketCharts(); drawStats(); drawConfirm(); drawLadder(); drawEvents(); drawTiming();
 }
 function drawMarketCharts(){
   const c=MK.chart, i0=fromIndex(c.dates,mkState.years);
@@ -452,6 +456,22 @@ function drawConfirm(){
   };
   host.innerHTML=mk('bottom','▲ 確認型底部（勝率＝之後上漲）')+mk('top','▼ 確認型高點（勝率＝之後下跌）')+
     '<p class="note" style="margin:8px 0 0">若確認型也沒有贏過基準，結論就是：這組免費資料與方法抓不到高低點，請把訊號當成「市場狀態儀表板」，不要當成買賣依據。</p>';
+}
+function drawLadder(){
+  const host=$('#mk-ladder'); if(!host) return;
+  const L=MK.ladder;
+  if(!L){ host.innerHTML='<p class="note">這個區塊需要等 Actions 重新執行後才會有資料。</p>'; return; }
+  const cur=L.current_dd, hs=L.horizons;
+  const reached=L.levels.filter(x=>cur!=null&&cur<=-x.level), nxt=L.levels.find(x=>cur==null||cur>-x.level);
+  const status=cur==null?'':`<p style="margin:2px 0 8px">加權指數目前較一年高點回落 <b>${pct(cur,1)}</b>。${reached.length?`已跌破 ${reached.map(x=>'−'+Math.round(x.level*100)+'%').join('、')} 門檻。`:'尚未跌破任何門檻。'}${nxt?`下一個門檻 −${Math.round(nxt.level*100)}% 還差約 ${((cur+nxt.level)*100).toFixed(1)} 個百分點。`:''}</p>`;
+  const rows=L.levels.map(x=>{
+    const cells=hs.map(h=>{ const a=x.fwd[h]; return a&&a.n?`${pct(a.win,0)}/${retCell(a.mean,0)}`:'—'; });
+    return `<tr${cur!=null&&cur<=-x.level?' style="font-weight:700"':''}><td>−${Math.round(x.level*100)}%</td><td>${x.n}</td><td>${x.further_median==null?'—':retCell(x.further_median,0)}</td><td>${x.further_worst==null?'—':retCell(x.further_worst,0)}</td>${cells.map(c=>`<td>${c}</td>`).join('')}</tr>`; });
+  const b=hs.map(h=>{ const a=L.baseline[h]; return a&&a.n?`${pct(a.win,0)}/${retCell(a.mean,0)}`:'—'; });
+  rows.push(`<tr class="base"><td>任一天進場</td><td>—</td><td>—</td><td>—</td>${b.map(c=>`<td>${c}</td>`).join('')}</tr>`);
+  host.innerHTML=status+table(['回落','輪數','再跌中位','再跌最慘',...hs.map(h=>h+'日')],rows)+
+    `<p class="note" style="margin:6px 0 0">「回落」＝收盤較過去一年高點下跌的幅度。每一輪行情只算一次（回落收斂到 5% 內才算下一輪）。各「N日」欄顯示「勝率/平均報酬」，以隔日進場、持有 N 個交易日計算；「再跌」＝之後一年內還會再創的最大跌幅（中位數／最慘一次）。輪數很少（尤其 −25%、−30%），結果只能當參考。</p>
+    <p class="note" style="margin:6px 0 0"><b>怎麼用：</b>這不是預測底部。它顯示的是：跌到某個門檻後，之後通常還會再跌多少、多久後回來。你可以事先決定「回落到哪幾個門檻各投入多少」（例如 −10%、−20%、−30% 各三分之一），並確認自己承受得了「之後再跌（最慘）」那一欄的幅度。</p>`;
 }
 function drawEvents(){
   let evs=MK.stats.events.slice().reverse();
