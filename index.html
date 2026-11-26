@@ -142,6 +142,7 @@ const $ = (s, el=document) => el.querySelector(s);
 /* ---------- header ---------- */
 $('#meta').textContent = `資料截止 ${M.data_through} ・ 回測 ${M.backtest_start} ~ ${M.data_through}（樣本外自 ${M.oos_start}）・ 產生於 ${M.generated_at}`;
 const notes = [];
+if(typeof navigator!=='undefined'&&navigator.onLine===false) notes.push('<b>目前離線：</b>顯示的是上次下載的資料（產生於 '+M.generated_at+'，資料至 '+M.data_through+'）。連上網路後重新整理，就會更新成最新資料。');
 const EXPECT_SCHEMA = 6;
 if(M.schema_version!==EXPECT_SCHEMA) notes.push('<b>⚠ 資料版本與頁面不一致：</b>目前看到的數字是舊版程式產生的（頁面需要資料版本 '+EXPECT_SCHEMA+'，實際為 '+(M.schema_version||'舊版')+'），部分區塊可能缺資料或與說明文字不符。請到 GitHub → Actions → update-backtest → Run workflow 重新執行一次，完成後重新整理頁面。');
 if(M.demo) notes.push('<b>⚠ 這是 DEMO 示範資料（電腦合成，不是真實行情）。</b>所有數字、訊號與選股清單都沒有意義，只用來展示介面。請在 GitHub 執行 <code>python run_all.py</code> 或啟用 Actions，換成真實資料。');
@@ -792,6 +793,19 @@ const renderers={overview:renderOverview,market:renderMarket,stocks:renderStocks
 const redraw={market:()=>{drawMarketCharts();drawTiming();},perf:drawPerfCharts};
 let rt; window.addEventListener('resize',()=>{ clearTimeout(rt); rt=setTimeout(()=>{ const t=location.hash.slice(1)||'overview'; if(redraw[t]&&rendered[t]) redraw[t](); },150); });
 show(location.hash.slice(1)||'overview');
+})();
+</script>
+<script>
+/* 離線快取（Service Worker）：只在 http(s) 下啟用；file:// 本來就不需要網路 */
+(function(){
+  if(!('serviceWorker' in navigator) || !/^https?:$/.test(location.protocol)) return;
+  window.addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
+  var t=null;
+  function toast(msg){ var d=document.getElementById('net-toast'); if(!d){ d=document.createElement('div'); d.id='net-toast';
+    d.style.cssText='position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:#111827;color:#fff;padding:8px 14px;border-radius:999px;font-size:13px;z-index:99;box-shadow:0 2px 10px rgba(0,0,0,.3)'; document.body.appendChild(d); }
+    d.textContent=msg; d.style.display='block'; clearTimeout(t); t=setTimeout(function(){ d.style.display='none'; },4000); }
+  window.addEventListener('offline',function(){ toast('已離線：顯示上次下載的資料'); });
+  window.addEventListener('online',function(){ toast('已連線：重新整理即可更新資料'); });
 })();
 </script>
 </body>
