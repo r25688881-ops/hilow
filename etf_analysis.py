@@ -41,6 +41,33 @@ def _cagr(adj: pd.Series):
     return float((adj.iloc[-1] / adj.iloc[0]) ** (365.25 / days) - 1)
 
 
+def _gap_freq(d: pd.Series) -> str:
+    gaps = np.diff(d.index.values[-7:]).astype("timedelta64[D]").astype(float)  # 最近最多 6 個間隔，反映「目前」的頻率
+    g = float(np.median(gaps))
+    if g < 45:
+        return "月配"
+    if g < 135:
+        return "季配"
+    if g < 270:
+        return "半年配"
+    return "年配"
+
+
+def _freq(d: pd.Series, days: int, declared: str | None) -> tuple[str, str]:
+    """配息頻率：有 3 次以上配息 → 用最近幾次的間隔（能反映頻率有沒有改過）；
+    歷史滿 1 年但配息很少 → 用次數；歷史未滿 1 年且配息不足 → 用公告值。回傳 (頻率, 來源：實際／公告／不明)。"""
+    d = d[d > 0].sort_index()
+    if len(d) >= 3:
+        return _gap_freq(d), "實際"
+    if days >= 365:
+        return {0: "不配息", 1: "年配", 2: "半年配"}[len(d)], "實際"
+    if len(d) == 2:
+        return _gap_freq(d), "實際"
+    if declared:
+        return declared, "公告"
+    return "不明", "不明"
+
+
 def analyze(adj: pd.DataFrame, raw: pd.DataFrame, div: pd.DataFrame, failed: list, fixes: list) -> dict:
     meta = {e["code"]: e for e in ETFS}
     ok_codes = [e["code"] for e in ETFS if e["code"] in adj.columns and adj[e["code"]].dropna().shape[0] >= C.ETF_MIN_DAYS]
@@ -73,6 +100,7 @@ def analyze(adj: pd.DataFrame, raw: pd.DataFrame, div: pd.DataFrame, failed: lis
         px = raw[code].dropna().iloc[-1] if code in raw.columns and raw[code].notna().any() else np.nan
         row["yld"] = float(d.sum() / px) if px == px and px > 0 else None
         row["ndiv"] = int(len(d))
+        row["freq"], row["freq_src"] = _freq(d, days, m.get("freq"))
         row["yld_partial"] = days < 365
         # 與 0050 比較（同一期間）
         if bench is not None and code != "0050":
